@@ -18,7 +18,7 @@ import javax.net.ssl.HttpsURLConnection;
 public class MavenUtils
 {
     private static final String MAVEN_REPO_URL = "https://repo1.maven.org/maven2/";
-    private static final String MAVEN_SEARCH_URL = "https://search.maven.org/solrsearch/select?wt=json&rows=1";
+    //private static final String MAVEN_SEARCH_URL = "https://search.maven.org/solrsearch/select?wt=json&rows=1";
 
     private MavenUtils()
     {}
