@@ -1,0 +1,27 @@
+<idea-plugin>
+    <id>tarn.gradle.dependencies</id>
+    <name>Check for Dependency Updates</name>
+    <vendor email="tarn.net@gmail.com" url="https://github.com/tarn2206">t@rn</vendor>
+
+    <description><![CDATA[
+        Check gradle projects dependencies for version upgrades.
+    ]]></description>
+
+    <depends>com.intellij.modules.java</depends>
+
+    <idea-version since-build="171.4694.73"/>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Dependencies" icon="/icons/toolWindow.svg" anchor="right"
+                    factoryClass="com.github.tarn2206.DependenciesToolWindowFactory"/>
+    </extensions>
+
+    <actions>
+        <action id="DependenciesUpdatesAction"
+                class="com.github.tarn2206.DependenciesUpdatesAction"
+                text="Check Dependencies Updates">
+            <add-to-group group-id="AnalyzeActions" anchor="last"/>
+        </action>
+    </actions>
+
+</idea-plugin>

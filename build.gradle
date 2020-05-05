@@ -1,0 +1,23 @@
+plugins {
+    id 'java'
+    id 'org.jetbrains.intellij' version '0.4.19'
+}
+
+group 'com.github.tarn2206'
+version '1.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation gradleApi()
+    implementation 'io.reactivex.rxjava3:rxjava:3.0.3'
+    implementation 'com.github.akarnokd:rxjava3-swing:3.0.0'
+    testImplementation 'junit:junit:4.12'
+}
+
+intellij {
+    version = 'IC-171.4694.73'
+    updateSinceUntilBuild false
+}
