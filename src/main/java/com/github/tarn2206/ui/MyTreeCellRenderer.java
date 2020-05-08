@@ -19,20 +19,20 @@ public class MyTreeCellRenderer extends ColoredTreeCellRenderer
     public static final SimpleTextAttributes CYAN_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(new Color(0x389FD6), new Color(0x3592C4)));
     public static final SimpleTextAttributes GREEN_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(new Color(0x59A869), new Color(0x499C54)));
     public static final SimpleTextAttributes RED_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(new Color(0xDB5860), new Color(0xC75450)));
-    public static final SimpleTextAttributes GRAY_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(new Color(0x6E6E6E), new Color(0xAFB1B3)));
+    public static final SimpleTextAttributes GRAY_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(new Color(0x999999), new Color(0x666666)));
 
     public void customizeCellRenderer(@NotNull JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row,
                                       boolean hasFocus)
     {
         DefaultMutableTreeNode node = (DefaultMutableTreeNode)value;
         Object obj = node.getUserObject();
-        if (obj instanceof UserObject)
+        if (obj instanceof MyObject)
         {
-            UserObject userObject = (UserObject)obj;
-            if (userObject.data instanceof Dependency)
+            MyObject<?> myObject = (MyObject<?>)obj;
+            if (myObject.data instanceof Dependency)
             {
                 setIcon(AllIcons.Nodes.PpLib);
-                Dependency dependency = (Dependency)userObject.data;
+                Dependency dependency = (Dependency)myObject.data;
                 if (dependency.hasLatestVersion())
                 {
                     append(dependency.group + ':' + dependency.name + ':');
@@ -41,20 +41,25 @@ public class MyTreeCellRenderer extends ColoredTreeCellRenderer
                     append(dependency.latestVersion, CYAN_ATTRIBUTES);
                     return;
                 }
+                append(myObject.data.toString());
             }
-            else setIcon(node.getLevel() < 2 ? AllIcons.Nodes.PpJdk : AllIcons.Nodes.Module);
+            else if (myObject.data instanceof String)
+            {
+                setIcon(node.getLevel() < 2 ? AllIcons.Nodes.PpJdk : AllIcons.Nodes.Module);
+                append((String)myObject.data);
+            }
+            else if (myObject.data instanceof Throwable)
+            {
+                setIcon(AllIcons.Ide.FatalError);
+                append(myObject.data.toString(), RED_ATTRIBUTES);
+            }
 
-            append(userObject.data.toString());
-            appendText(userObject.status, ORANGE_ATTRIBUTES);
-            appendText(userObject.error, RED_ATTRIBUTES);
+            if (myObject.status != null)
+            {
+                append(" - ");
+                append(myObject.status, GRAY_ATTRIBUTES);
+            }
         }
         else if (obj != null) append(obj.toString(), GRAY_ATTRIBUTES);
-    }
-
-    private void appendText(String s, SimpleTextAttributes attr)
-    {
-        if (s == null || s.length() == 0) return;
-        append(" - ");
-        append(s, attr);
     }
 }

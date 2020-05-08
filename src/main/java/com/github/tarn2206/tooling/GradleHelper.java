@@ -32,10 +32,23 @@ public class GradleHelper
 
         List<Dependency> list = new ArrayList<>();
         Scanner scanner = new Scanner(out.toString());
+        boolean inBlock = false;
         while (scanner.hasNext())
         {
             String line = scanner.nextLine();
-            if ((line.startsWith("+--- ") || line.startsWith("\\--- ")) && !line.endsWith(" (n)"))
+            if (line.startsWith("compileClasspath - ") || line.startsWith("testCompileClasspath - ")
+                || line.startsWith("debugRuntimeClasspath - "))
+            {
+                inBlock = true;
+            }
+            if (!inBlock) continue;
+            if (line.isEmpty())
+            {
+                inBlock = false;
+                continue;
+            }
+
+            if (line.startsWith("+--- ") || line.startsWith("\\--- "))
             {
                 Dependency dependency = parseDependency(line.substring(5));
                 if (dependency != null && !list.contains(dependency))

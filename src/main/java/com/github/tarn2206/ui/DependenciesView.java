@@ -1,5 +1,6 @@
 package com.github.tarn2206.ui;
 
+import java.io.File;
 import java.util.List;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
@@ -64,13 +65,19 @@ public class DependenciesView extends SimpleToolWindowPanel
     {
         worker = 0;
         root.removeAllChildren();
-        listDependencies(root, project.getName(), project.getBasePath());
+        String basePath = project.getBasePath();
+        File app = new File(basePath, "app/build.gradle");
+        if (app.exists())
+        {
+            basePath = app.getParent();
+        }
+        listDependencies(root, project.getName(), basePath);
     }
 
     private void listDependencies(DefaultMutableTreeNode node, String projectName, String projectDir)
     {
-        UserObject userObject = new UserObject(projectName);
-        node.setUserObject(userObject);
+        MyObject<String> myObject = new MyObject<>(projectName);
+        node.setUserObject(myObject);
         node.add(new DefaultMutableTreeNode("loading..."));
         tree.expandPath(new TreePath(node.getPath()));
         tree.updateUI();
@@ -79,7 +86,7 @@ public class DependenciesView extends SimpleToolWindowPanel
         Single.fromCallable(() -> GradleHelper.listDependencies(projectDir))
               .subscribeOn(Schedulers.io())
               .observeOn(SwingSchedulers.edt())
-              .subscribe(dependencies -> displayDependencies(node, dependencies), t -> onError(userObject, t));
+              .subscribe(dependencies -> displayDependencies(node, dependencies), t -> onError(node, t));
     }
 
     private void displayDependencies(DefaultMutableTreeNode parent, List<Dependency> dependencies)
@@ -91,7 +98,7 @@ public class DependenciesView extends SimpleToolWindowPanel
             {
                 if (isProjectInTree(dependency.toString()))
                 {
-                    parent.add(new DefaultMutableTreeNode(new UserObject(dependency.toString())));
+                    parent.add(new DefaultMutableTreeNode(new MyObject<>(dependency.toString())));
                 }
                 else
                 {
@@ -102,19 +109,19 @@ public class DependenciesView extends SimpleToolWindowPanel
             }
             else
             {
-                UserObject userObject = new UserObject(dependency);
-                userObject.status = "Check for Updates...";
-                DefaultMutableTreeNode child = new DefaultMutableTreeNode(userObject);
+                MyObject<Dependency> myObject = new MyObject<>(dependency);
+                myObject.status = "check for updates...";
+                DefaultMutableTreeNode child = new DefaultMutableTreeNode(myObject);
                 parent.add(child);
                 worker++;
                 Single.fromCallable(() -> MavenUtils.checkForUpdate(dependency))
                       .subscribeOn(Schedulers.io())
                       .observeOn(SwingSchedulers.edt())
                       .subscribe(result -> {
-                          userObject.status = null;
+                          myObject.status = null;
                           tree.updateUI();
                           worker--;
-                      }, t -> onError(userObject, t));
+                      }, t -> onError(child, t));
             }
         }
         worker--;
@@ -127,22 +134,25 @@ public class DependenciesView extends SimpleToolWindowPanel
         for (int i = 0; i < childCount; i++)
         {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode)root.getChildAt(i);
-            UserObject userObject = (UserObject)child.getUserObject();
-            if (userObject.data instanceof String)
+            MyObject<?> myObject = (MyObject<?>)child.getUserObject();
+            if (myObject.data instanceof String && project.equals(myObject.data))
             {
-                String s = (String)userObject.data;
-                if (s.equals(project)) return true;
+                return true;
             }
         }
         return false;
     }
 
-    private void onError(UserObject userObject, Throwable t)
+    private void onError(DefaultMutableTreeNode node, Throwable t)
     {
-        userObject.status = null;
-        userObject.error = t.toString();
+        t.printStackTrace();
+
+        node.removeAllChildren();
+        DefaultMutableTreeNode child = new DefaultMutableTreeNode(new MyObject<>(t));
+        node.add(child);
         tree.updateUI();
-        Notify.error(project, userObject.error);
+
+        Notify.error(project, t.getMessage());
         worker--;
     }
 }
