@@ -121,7 +121,10 @@ public class DependenciesView extends SimpleToolWindowPanel
                           myObject.status = null;
                           tree.updateUI();
                           worker--;
-                      }, t -> onError(child, t));
+                      }, tr -> {
+                          myObject.status = null;
+                          onError(child, tr);
+                      });
             }
         }
         worker--;
@@ -143,16 +146,15 @@ public class DependenciesView extends SimpleToolWindowPanel
         return false;
     }
 
-    private void onError(DefaultMutableTreeNode node, Throwable t)
+    private void onError(DefaultMutableTreeNode node, Throwable tr)
     {
-        t.printStackTrace();
+        tr.printStackTrace();
 
         node.removeAllChildren();
-        DefaultMutableTreeNode child = new DefaultMutableTreeNode(new MyObject<>(t));
+        DefaultMutableTreeNode child = new DefaultMutableTreeNode(new MyObject<>(tr));
         node.add(child);
+        tree.expandPath(new TreePath(node.getPath()));
         tree.updateUI();
-
-        Notify.error(project, t.getMessage());
         worker--;
     }
 }
