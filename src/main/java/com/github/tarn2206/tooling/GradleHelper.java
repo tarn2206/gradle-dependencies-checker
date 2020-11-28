@@ -14,24 +14,55 @@ public class GradleHelper
     private GradleHelper()
     {}
 
-    public static List<Dependency> listDependencies(String projectDir)
+    public static List<String> listProjects(String projectDir)
     {
-        return listDependencies(new File(projectDir));
+        String text = run(projectDir, "projects");
+        return parseListProjects(text);
     }
 
-    public static List<Dependency> listDependencies(File projectDir)
+    public static List<Dependency> listDependencies(String projectDir)
+    {
+        String text = run(projectDir, "dependencies");
+        return parseListDependencies(text);
+    }
+
+    private static String run(String projectDir, String task)
     {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (ProjectConnection connection = GradleConnector.newConnector().forProjectDirectory(projectDir).connect())
+        try (ProjectConnection connection = GradleConnector.newConnector()
+                                                           .forProjectDirectory(new File(projectDir))
+                                                           .connect())
         {
             connection.newBuild()
+                      .forTasks(task)
                       .setStandardOutput(out)
-                      .forTasks("dependencies")
                       .run();
         }
+        return out.toString();
+    }
 
+    private static List<String> parseListProjects(String text)
+    {
+        List<String> list = new ArrayList<>();
+        Scanner scanner = new Scanner(text);
+        while (scanner.hasNext())
+        {
+            String line = scanner.nextLine();
+            if (line.startsWith("Root project ") || line.startsWith("+--- Project ") || line.startsWith("\\--- Project "))
+            {
+                int i = line.indexOf('\'');
+                if (line.charAt(i + 1) == ':') i++;
+                String name = line.substring(i + 1, line.length() - 1);
+                list.add(name);
+            }
+        }
+        return list;
+    }
+
+    private static List<Dependency> parseListDependencies(String text)
+    {
         List<Dependency> list = new ArrayList<>();
-        Scanner scanner = new Scanner(out.toString());
+        Scanner scanner = new Scanner(text);
         boolean inBlock = false;
         while (scanner.hasNext())
         {

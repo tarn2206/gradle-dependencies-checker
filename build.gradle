@@ -1,10 +1,9 @@
 plugins {
-    id 'java'
-    id 'org.jetbrains.intellij' version '0.4.19'
+    id 'org.jetbrains.intellij' version '0.6.5'
 }
 
 group 'com.github.tarn2206'
-version '1.1'
+version '1.2'
 
 repositories {
     mavenCentral()
@@ -12,12 +11,16 @@ repositories {
 
 dependencies {
     implementation gradleApi()
-    implementation 'io.reactivex.rxjava3:rxjava:3.0.3'
+    implementation 'io.reactivex.rxjava3:rxjava:3.0.7'
     implementation 'com.github.akarnokd:rxjava3-swing:3.0.0'
-    testImplementation 'junit:junit:4.12'
+    testImplementation 'junit:junit:4.13.1'
 }
 
 intellij {
-    version = 'IC-171.4694.73'
-    updateSinceUntilBuild false
+    version = '2020.2.3'
+}
+
+patchPluginXml {
+    changeNotes """
+      Add support a multi-project build"""
 }

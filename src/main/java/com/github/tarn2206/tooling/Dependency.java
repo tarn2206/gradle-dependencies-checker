@@ -19,11 +19,6 @@ public class Dependency
         this.version = version;
     }
 
-    public String key()
-    {
-        return group + ':' + name;
-    }
-
     @Override
     public boolean equals(Object o)
     {
@@ -42,7 +37,7 @@ public class Dependency
     @Override
     public String toString()
     {
-        return version == null ? group + ':' + name : group + ':' + name + ':' + version;
+        return version == null ? name : group + ':' + name + ':' + version;
     }
 
     public boolean hasLatestVersion()

@@ -1,7 +1,9 @@
 package com.github.tarn2206.ui;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
 
@@ -28,7 +30,7 @@ public class DependenciesView extends SimpleToolWindowPanel
 {
     private final Project project;
     private Tree tree;
-    private DefaultMutableTreeNode root;
+    private DefaultMutableTreeNode rootNode;
     private int worker = 0;
 
     public DependenciesView(Project project)
@@ -48,8 +50,8 @@ public class DependenciesView extends SimpleToolWindowPanel
         Content content = ContentFactory.SERVICE.getInstance().createContent(this, "", false);
         toolWindow.getContentManager().addContent(content);
 
-        root = new DefaultMutableTreeNode();
-        tree = new Tree(root);
+        rootNode = new DefaultMutableTreeNode();
+        tree = new Tree(rootNode);
         tree.setCellRenderer(new MyTreeCellRenderer());
         setContent(new JBScrollPane(tree));
 
@@ -63,82 +65,107 @@ public class DependenciesView extends SimpleToolWindowPanel
 
     public void run()
     {
-        worker = 0;
-        root.removeAllChildren();
-        String basePath = project.getBasePath();
-        File app = new File(basePath, "app/build.gradle");
-        if (app.exists())
-        {
-            basePath = app.getParent();
-        }
-        listDependencies(root, project.getName(), basePath);
+        rootNode.removeAllChildren();
+        rootNode.setUserObject(new MyObject<>("loading..."));
+        worker = 1;
+        fromCallable(() -> GradleHelper.listProjects(project.getBasePath()))
+                .subscribe(this::addProjects, tr -> onError(rootNode, tr));
     }
 
-    private void listDependencies(DefaultMutableTreeNode node, String projectName, String projectDir)
+    private void addProjects(List<String> projects)
     {
-        MyObject<String> myObject = new MyObject<>(projectName);
-        node.setUserObject(myObject);
-        node.add(new DefaultMutableTreeNode("loading..."));
-        tree.expandPath(new TreePath(node.getPath()));
-        tree.updateUI();
+        if (projects.size() > 0)
+        {
+            List<Item> list = new ArrayList<>();
+            rootNode.setUserObject(new MyObject<>(projects.get(0)));
+            File buildFile = new File(project.getBasePath(), "build.gradle");
+            if (buildFile.exists())
+            {
+                list.add(new Item(rootNode, project.getBasePath()));
+            }
+            for (int i = 1; i < projects.size(); i++)
+            {
+                DefaultMutableTreeNode node = new DefaultMutableTreeNode(new MyObject<>(projects.get(i)));
+                rootNode.add(node);
+                if (i == 1 && !buildFile.exists())
+                {
+                    expandNode(rootNode);
+                }
+                list.add(new Item(node, project.getBasePath() + File.separatorChar + projects.get(i)));
+            }
+            listDependencies(list);
+        }
+        worker--;
+    }
+
+    private void listDependencies(List<Item> list)
+    {
+        if (list.isEmpty()) return;
+
+        Item item = list.remove(0);
+        item.node.insert(new DefaultMutableTreeNode("loading..."), 0);
+        expandNode(item.node);
 
         worker++;
-        Single.fromCallable(() -> GradleHelper.listDependencies(projectDir))
-              .subscribeOn(Schedulers.io())
-              .observeOn(SwingSchedulers.edt())
-              .subscribe(dependencies -> displayDependencies(node, dependencies), t -> onError(node, t));
+        fromCallable(() -> GradleHelper.listDependencies(item.path))
+                .subscribe(dependencies -> {
+                    displayDependencies(item.node, dependencies);
+                    listDependencies(list);
+                }, tr -> {
+                    onError(item.node, tr);
+                    listDependencies(list);
+                });
     }
 
     private void displayDependencies(DefaultMutableTreeNode parent, List<Dependency> dependencies)
     {
-        parent.removeAllChildren();
+        parent.remove(0);
+        int n = 0;
         for (Dependency dependency : dependencies)
         {
-            if ("project ".equals(dependency.group))
-            {
-                if (isProjectInTree(dependency.toString()))
-                {
-                    parent.add(new DefaultMutableTreeNode(new MyObject<>(dependency.toString())));
-                }
-                else
-                {
-                    DefaultMutableTreeNode child = new DefaultMutableTreeNode();
-                    root.add(child);
-                    listDependencies(child, dependency.toString(), project.getBasePath() + "/" + dependency.name);
-                }
-            }
-            else
+            if (!"project ".equals(dependency.group))
             {
                 MyObject<Dependency> myObject = new MyObject<>(dependency);
                 myObject.status = "check for updates...";
                 DefaultMutableTreeNode child = new DefaultMutableTreeNode(myObject);
-                parent.add(child);
+                parent.insert(child, n++);
                 worker++;
-                Single.fromCallable(() -> MavenUtils.checkForUpdate(dependency))
-                      .subscribeOn(Schedulers.io())
-                      .observeOn(SwingSchedulers.edt())
-                      .subscribe(result -> {
-                          myObject.status = null;
-                          tree.updateUI();
-                          worker--;
-                      }, tr -> {
-                          myObject.status = null;
-                          onError(child, tr);
-                      });
+                fromCallable(() -> MavenUtils.checkForUpdate(dependency))
+                        .subscribe(result -> {
+                            myObject.status = null;
+                            tree.updateUI();
+                            worker--;
+                        }, tr -> {
+                            myObject.status = null;
+                            onError(child, tr);
+                        });
+            }
+            else
+            {
+                if (parent != rootNode)
+                {
+                    parent.insert(new DefaultMutableTreeNode(new MyObject<>(dependency.toString())), n++);
+                }
+                if (!exists(rootNode, dependency.toString()))
+                {
+                    DefaultMutableTreeNode child = new DefaultMutableTreeNode(new MyObject<>("* " + dependency.toString()));
+                    rootNode.add(child);
+                    //listDependencies(child, project.getBasePath() + File.separatorChar + dependency.name);
+                }
             }
         }
         worker--;
         tree.updateUI();
     }
 
-    private boolean isProjectInTree(String project)
+    private boolean exists(DefaultMutableTreeNode node, String text)
     {
-        int childCount = root.getChildCount();
+        int childCount = node.getChildCount();
         for (int i = 0; i < childCount; i++)
         {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode)root.getChildAt(i);
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode)node.getChildAt(i);
             MyObject<?> myObject = (MyObject<?>)child.getUserObject();
-            if (myObject.data instanceof String && project.equals(myObject.data))
+            if (myObject.data instanceof String && text.equals(myObject.data))
             {
                 return true;
             }
@@ -153,8 +180,20 @@ public class DependenciesView extends SimpleToolWindowPanel
         node.removeAllChildren();
         DefaultMutableTreeNode child = new DefaultMutableTreeNode(new MyObject<>(tr));
         node.add(child);
+        expandNode(node);
+        worker--;
+    }
+
+    private void expandNode(DefaultMutableTreeNode node)
+    {
         tree.expandPath(new TreePath(node.getPath()));
         tree.updateUI();
-        worker--;
+    }
+
+    private static <T> Single<? extends T> fromCallable(Callable<? extends T> callable)
+    {
+        return Single.fromCallable(callable)
+                     .subscribeOn(Schedulers.io())
+                     .observeOn(SwingSchedulers.edt());
     }
 }

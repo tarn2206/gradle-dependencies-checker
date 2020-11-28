@@ -9,10 +9,9 @@
 
     <depends>com.intellij.modules.platform</depends>
 
-    <idea-version since-build="171.4694.73"/>
-
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="Dependencies" icon="/icons/toolWindow.svg" anchor="right"
+                    canCloseContents="true" doNotActivateOnStart="true"
                     factoryClass="com.github.tarn2206.DependenciesToolWindowFactory"/>
     </extensions>
 

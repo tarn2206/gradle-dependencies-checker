@@ -35,8 +35,7 @@ public class MyTreeCellRenderer extends ColoredTreeCellRenderer
                 Dependency dependency = (Dependency)myObject.data;
                 if (dependency.hasLatestVersion())
                 {
-                    append(dependency.group + ':' + dependency.name + ':');
-                    append(dependency.version, ORANGE_ATTRIBUTES);
+                    append(dependency.group + ':' + dependency.name + ':' + dependency.version, ORANGE_ATTRIBUTES);
                     append(" -> ");
                     append(dependency.latestVersion, CYAN_ATTRIBUTES);
                     return;
