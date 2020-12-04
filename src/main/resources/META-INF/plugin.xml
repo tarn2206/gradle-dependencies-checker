@@ -7,7 +7,9 @@
         Check gradle projects dependencies for version upgrades.
     ]]></description>
 
-    <depends>com.intellij.modules.platform</depends>
+    <idea-version since-build="192.7142.36"/>
+
+    <depends>com.intellij.modules.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="Dependencies" icon="/icons/toolWindow.svg" anchor="right"

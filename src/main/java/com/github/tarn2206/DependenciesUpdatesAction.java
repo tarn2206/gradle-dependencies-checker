@@ -24,7 +24,7 @@ public class DependenciesUpdatesAction extends AnAction
         ToolWindow toolWindow = toolWindowManager.getToolWindow(TOOL_WINDOW_ID);
         if (toolWindow != null)
         {
-            toolWindow.show();
+            toolWindow.show(null);
         }
     }
 }
