@@ -7,7 +7,7 @@
         Check gradle projects dependencies for version upgrades.
     ]]></description>
 
-    <idea-version since-build="192.7142.36"/>
+    <idea-version since-build="2021.1"/>
 
     <depends>com.intellij.modules.java</depends>
 

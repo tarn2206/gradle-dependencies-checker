@@ -24,6 +24,7 @@ import com.intellij.ui.treeStructure.Tree;
 import hu.akarnokd.rxjava3.swing.SwingSchedulers;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.schedulers.Schedulers;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
 
 public class DependenciesView extends SimpleToolWindowPanel
@@ -176,9 +177,11 @@ public class DependenciesView extends SimpleToolWindowPanel
     private void onError(DefaultMutableTreeNode node, Throwable tr)
     {
         tr.printStackTrace();
+        Throwable rootCause = ExceptionUtils.getRootCause(tr);
+        String message = rootCause == null ? tr.getMessage() : rootCause.getMessage();
 
         node.removeAllChildren();
-        DefaultMutableTreeNode child = new DefaultMutableTreeNode(new MyObject<>(tr));
+        DefaultMutableTreeNode child = new DefaultMutableTreeNode(new MyObject<>(message));
         node.add(child);
         expandNode(node);
         worker--;
