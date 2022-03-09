@@ -9,107 +9,100 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
 import org.gradle.tooling.GradleConnector;
-import org.gradle.tooling.ProjectConnection;
+import org.gradle.tooling.model.GradleProject;
 
 public class GradleHelper
 {
     private GradleHelper()
     {}
 
-    public static List<String> listProjects(String projectDir) throws IOException
+    public static ProjectInfo getProjectInfo(String projectPath) throws IOException
     {
-        String text = run(projectDir, "projects");
-        return parseListProjects(text);
+        var connector = newConnector(projectPath, new File(projectPath));
+        try (var connection = connector.connect())
+        {
+            return create(connection.getModel(GradleProject.class));
+        }
     }
 
-    public static List<Dependency> listDependencies(String projectDir) throws IOException
+    private static ProjectInfo create(GradleProject gradleProject)
     {
-        String text = run(projectDir, "dependencies");
-        return parseListDependencies(text);
+        var children = gradleProject.getChildren().stream().map(GradleHelper::create).collect(Collectors.toList());
+        return new ProjectInfo(gradleProject.getName(), gradleProject.getBuildScript().getSourceFile(), children);
     }
 
-    private static String run(String projectDir, String task) throws IOException
+    public static List<Dependency> getDependencies(String projectPath, File projectDirectory) throws IOException
     {
-        GradleConnector connector = GradleConnector.newConnector().forProjectDirectory(new File(projectDir));
-        File gradleWrapper = new File(projectDir, "gradle/wrapper/gradle-wrapper.properties");
+        var connector = newConnector(projectPath, projectDirectory);
+        try (var connection = connector.connect(); var out = new ByteArrayOutputStream())
+        {
+            connection.newBuild()
+                   .forTasks("dependencies")
+                   .setStandardOutput(out)
+                   .run();
+            return parseDependencies(out.toString());
+        }
+    }
+
+    private static GradleConnector newConnector(String rootProjectPath, File projectDirectory) throws IOException
+    {
+        var connector = GradleConnector.newConnector().forProjectDirectory(projectDirectory);
+        var gradleWrapper = new File(projectDirectory, "gradle/wrapper/gradle-wrapper.properties");
+        if (!gradleWrapper.exists())
+        {
+            gradleWrapper = new File(rootProjectPath, "gradle/wrapper/gradle-wrapper.properties");
+        }
         if (gradleWrapper.exists())
         {
-            Properties props = new Properties();
-            try (FileInputStream in = new FileInputStream(gradleWrapper))
+            var props = new Properties();
+            try (var in = new FileInputStream(gradleWrapper))
             {
                 props.load(in);
             }
-            String distributionUrl = props.getProperty("distributionUrl");
+            var distributionUrl = props.getProperty("distributionUrl");
             connector.useDistribution(URI.create(distributionUrl));
         }
         else
         {
-            String gradleHome = System.getenv("GRADLE_HOME");
+            var gradleHome = System.getenv("GRADLE_HOME");
             if (StringUtils.isNotBlank(gradleHome))
             {
                 connector.useInstallation(new File(gradleHome));
             }
         }
-
-        try (ProjectConnection project = connector.connect();
-             ByteArrayOutputStream out = new ByteArrayOutputStream())
-        {
-            project.newBuild()
-                   .forTasks(task)
-                   .setStandardOutput(out)
-                   .run();
-            return out.toString();
-        }
+        return connector;
     }
 
-    private static List<String> parseListProjects(String text)
+    private static List<Dependency> parseDependencies(String source)
     {
-        List<String> list = new ArrayList<>();
-        Scanner scanner = new Scanner(text);
-        while (scanner.hasNext())
+        var list = new ArrayList<Dependency>();
+        try (var scanner = new Scanner(source))
         {
-            String line = scanner.nextLine();
-            if (line.startsWith("Root project ") || line.startsWith("+--- Project ") || line.startsWith("\\--- Project "))
+            var inBlock = false;
+            while (scanner.hasNext())
             {
-                int i = line.indexOf('\'');
-                if (line.charAt(i + 1) == ':') i++;
-                String name = line.substring(i + 1, line.length() - 1);
-                if (!list.contains(name))
-                    list.add(name);
-            }
-        }
-        return list;
-    }
-
-    private static List<Dependency> parseListDependencies(String text)
-    {
-        List<Dependency> list = new ArrayList<>();
-        Scanner scanner = new Scanner(text);
-        boolean inBlock = false;
-        while (scanner.hasNext())
-        {
-            String line = scanner.nextLine();
-            if (line.startsWith("compileClasspath - ") || line.startsWith("testCompileClasspath - ")
-                || line.startsWith("debugRuntimeClasspath - "))
-            {
-                inBlock = true;
-            }
-            if (!inBlock) continue;
-            if (line.isEmpty())
-            {
-                inBlock = false;
-                continue;
-            }
-
-            if (line.startsWith("+--- ") || line.startsWith("\\--- "))
-            {
-                Dependency dependency = parseDependency(line.substring(5));
-                if (dependency != null && !list.contains(dependency))
+                var line = scanner.nextLine();
+                if (line.startsWith("compileClasspath - ") || line.startsWith("runtimeClasspath - ")
+                    || line.startsWith("testCompileClasspath - ") || line.startsWith("testRuntimeClasspath - "))
                 {
-                    list.add(dependency);
+                    inBlock = true;
+                }
+                else if (line.isEmpty())
+                {
+                    inBlock = false;
+                }
+
+                if (inBlock && (line.startsWith("+--- ") || line.startsWith("\\--- "))) // only first level
+                {
+                    var dependency = parseDependency(line.substring(5));
+                    if (dependency != null && list.stream().noneMatch(e -> e.sameModule(dependency)))
+                    {
+                        list.add(dependency);
+                    }
                 }
             }
         }
@@ -118,29 +111,31 @@ public class GradleHelper
 
     private static Dependency parseDependency(String s)
     {
-        String[] a = s.split(":");
+        var a = s.split(":");
         if (a.length < 2) return null;
 
-        if (a.length == 2)
+        if (a.length > 2)
         {
-            int i = a[1].indexOf(" -> ");
-            if (i == -1)
-            {
-                return new Dependency(a[0], trimEnd(a[1]), null);
-            }
-            String version = a[1].substring(i + 4);
-            return new Dependency(a[0], a[1].substring(0, i), trimEnd(version));
+            return new Dependency(a[0], a[1], a[2]);
         }
 
-        if (a[2].contains(" "))
+        var i = a[1].indexOf(" -> ");
+        if (i != -1)
         {
-            a[2] = a[2].substring(0, a[2].indexOf(' '));
+            var name = a[1].substring(0, i);
+            var version = a[1].substring(i + 4);
+            return new Dependency(a[0], name, version);
         }
-        return new Dependency(a[0], a[1], a[2]);
-    }
 
-    private static String trimEnd(String s)
-    {
-        return s.endsWith(" (*)") ? s.substring(0, s.length() - 4) : s;
+        i = a[1].indexOf(" ");
+        if (i == -1)
+        {
+            return new Dependency(a[0], a[1], null);
+        }
+
+        var name = a[1].substring(0, i);
+        var d = new Dependency(a[0], name, null);
+        d.error = a[1].substring(i + 1);
+        return "(n)".equals(d.error) ? null : d;
     }
 }

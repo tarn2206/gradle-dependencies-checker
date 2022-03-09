@@ -3,6 +3,7 @@ package com.github.tarn2206.ui;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import org.jetbrains.annotations.NotNull;
 
 public class RefreshAction extends AnAction
 {
@@ -10,12 +11,12 @@ public class RefreshAction extends AnAction
 
     public RefreshAction(DependenciesView view)
     {
-        super("Refresh", "Refresh all projects", AllIcons.Actions.Refresh);
+        super("Reload Gradle Project", null, AllIcons.Actions.Refresh);
         this.view = view;
     }
 
     @Override
-    public void actionPerformed(AnActionEvent e)
+    public void actionPerformed(@NotNull AnActionEvent e)
     {
         view.run();
     }

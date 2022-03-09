@@ -1,76 +1,51 @@
 package com.github.tarn2206.tooling;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
 public class Dependency
 {
-    public String group;
-    public String name;
-    public String version;
+    public final String group;
+    public final String name;
+    public final String version;
     public String latestVersion;
+    public String status;
     public String error;
+
+    public Dependency(String name)
+    {
+        this(null, name, null);
+    }
 
     public Dependency(String group, String name, String version)
     {
         this.group = group;
         this.name = name;
-        this.version = version;
+        this.version = version != null && version.contains(" ") ? version.substring(0, version.indexOf(' ')) : version;
     }
 
-    @Override
-    public boolean equals(Object o)
+    public boolean hasGroup()
     {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Dependency that = (Dependency)o;
-        return Objects.equals(group, that.group) && Objects.equals(name, that.name) && Objects.equals(version, that.version);
+        return group != null && !group.equals("project ");
     }
 
-    @Override
-    public int hashCode()
+    public boolean sameModule(Dependency o)
     {
-        return Objects.hash(group, name, version);
+        return o != null && Objects.equals(group, o.group) && Objects.equals(name, o.name);
     }
 
     @Override
     public String toString()
     {
-        return version == null ? name : group + ':' + name + ':' + version;
-    }
-
-    public boolean hasLatestVersion()
-    {
-        if (latestVersion == null) return false;
-
-        List<Integer> current = extractVersion(version);
-        List<Integer> latest = extractVersion(latestVersion);
-        int min = Math.min(current.size(), latest.size());
-        for (int i = 0; i < min; i++)
+        var s = new StringBuilder();
+        if (hasGroup())
         {
-            if (latest.get(i).equals(current.get(i))) continue;
-            return latest.get(i) > current.get(i);
+            s.append(group).append(":");
         }
-        return false;
-    }
-
-    private List<Integer> extractVersion(String version)
-    {
-        List<Integer> list = new ArrayList<>();
-        String[] a = version.split("\\.");
-        for (String s : a)
+        s.append(name);
+        if (version != null)
         {
-            try
-            {
-                int n = Integer.parseInt(s);
-                list.add(n);
-            }
-            catch (Exception e)
-            {
-                break;
-            }
+            s.append(":").append(version);
         }
-        return list;
+        return s.toString();
     }
 }

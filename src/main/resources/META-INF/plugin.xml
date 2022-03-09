@@ -1,27 +1,27 @@
 <idea-plugin>
     <id>tarn.gradle.dependencies</id>
-    <name>Check for Dependency Updates</name>
+    <name>Gradle Dependencies Checker</name>
     <vendor email="tarn.net@gmail.com" url="https://github.com/tarn2206">t@rn</vendor>
 
     <description><![CDATA[
         Check gradle projects dependencies for version upgrades.
     ]]></description>
 
-    <idea-version since-build="2021.1"/>
+    <idea-version since-build="203"/>
 
     <depends>com.intellij.modules.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="Dependencies" icon="/icons/toolWindow.svg" anchor="right"
+        <toolWindow id="Dependencies Checker" icon="/icons/toolWindow.svg" anchor="right"
                     canCloseContents="true" doNotActivateOnStart="true"
                     factoryClass="com.github.tarn2206.DependenciesToolWindowFactory"/>
     </extensions>
 
     <actions>
         <action id="DependenciesUpdatesAction"
-                class="com.github.tarn2206.DependenciesUpdatesAction"
+                class="com.github.tarn2206.DependenciesUpdateAction"
                 text="Check Dependencies Updates">
-            <add-to-group group-id="AnalyzeActions" anchor="last"/>
+            <add-to-group group-id="AnalyzeActions"/>
         </action>
     </actions>
 
