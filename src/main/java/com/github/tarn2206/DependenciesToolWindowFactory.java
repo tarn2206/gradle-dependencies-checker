@@ -11,6 +11,6 @@ public class DependenciesToolWindowFactory implements ToolWindowFactory
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow)
     {
-        new DependenciesView(project).initToolWindow(toolWindow);
+        new DependenciesView(project, toolWindow);
     }
 }
