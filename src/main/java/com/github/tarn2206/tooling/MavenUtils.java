@@ -109,6 +109,7 @@ public class MavenUtils
         if (latestVersion == null) return;
 
         var current = parseVersion(dependency.version);
+        while (current.size() < 3) current.add(0);
         var latest = parseVersion(latestVersion);
         var min = Math.min(current.size(), latest.size());
         for (var i = 0; i < min; i++)
