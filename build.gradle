@@ -29,6 +29,11 @@ buildSearchableOptions.enabled = false
 
 patchPluginXml {
     changeNotes = """
+<h2>1.5.1</h2>
+<ul>
+    <li>Support a prefix version range: e.g. 1.+, 1.3.+</li>
+    <li>Fix bug android projects not show dependencies</li>
+</ul>
 <h2>1.5</h2>
 <ul>
     <li>Support nested-project</li>
