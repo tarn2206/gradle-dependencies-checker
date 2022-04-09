@@ -1,10 +1,6 @@
 package com.github.tarn2206.ui;
 
-import java.awt.Component;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Queue;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -15,14 +11,10 @@ import com.github.tarn2206.tooling.Dependency;
 import com.github.tarn2206.tooling.GradleHelper;
 import com.github.tarn2206.tooling.MavenUtils;
 import com.github.tarn2206.tooling.ProjectInfo;
-import com.intellij.openapi.actionSystem.ActionManager;
-import com.intellij.openapi.actionSystem.ActionPlaces;
-import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
 import com.intellij.openapi.wm.ToolWindow;
-import com.intellij.ui.PopupHandler;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.ui.treeStructure.Tree;
@@ -36,8 +28,8 @@ import org.jetbrains.annotations.NotNull;
 public class DependenciesView extends SimpleToolWindowPanel
 {
     private final String projectPath;
-    private final Tree tree;
-    private final DefaultMutableTreeNode rootNode;
+    private Tree tree;
+    private DefaultMutableTreeNode rootNode;
     private final AtomicInteger worker = new AtomicInteger();
     private transient CompositeDisposable disposables;
     private final Set<Dependency> updateSet = new HashSet<>();
@@ -47,36 +39,23 @@ public class DependenciesView extends SimpleToolWindowPanel
     {
         super(true, true);
 
+        setupToolWindow(toolWindow);
+
+        projectPath = project.getBasePath();
+        StartupManager.getInstance(project).runWhenProjectIsInitialized(this::run);
+    }
+
+    private void setupToolWindow(ToolWindow toolWindow)
+    {
+        var refresh = new RefreshAction(this);
+        toolWindow.setTitleActions(Collections.singletonList(refresh));
+
         var content = ContentFactory.SERVICE.getInstance().createContent(this, "", false);
         toolWindow.getContentManager().addContent(content);
         rootNode = new DefaultMutableTreeNode();
         tree = new Tree(rootNode);
         tree.setCellRenderer(new MyTreeCellRenderer());
         setContent(new JBScrollPane(tree));
-        installPopupMenu();
-
-        projectPath = project.getBasePath();
-        StartupManager.getInstance(project).runWhenProjectIsInitialized(this::run);
-    }
-
-    private void installPopupMenu()
-    {
-        var actionGroup = new DefaultActionGroup("ACTION_GROUP", true);
-        actionGroup.addAction(new RefreshAction(this));
-
-        final var popupMenu = ActionManager.getInstance().createActionPopupMenu(ActionPlaces.TOOLWINDOW_POPUP, actionGroup);
-        tree.addMouseListener(new PopupHandler()
-        {
-            @Override
-            public void invokePopup(Component comp, int x, int y)
-            {
-                var row = tree.getClosestRowForLocation(x, y);
-                if (row == 0)
-                {
-                    popupMenu.getComponent().show(comp, x, y);
-                }
-            }
-        });
     }
 
     public boolean isIdle()

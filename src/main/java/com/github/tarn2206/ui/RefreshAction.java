@@ -11,7 +11,7 @@ public class RefreshAction extends AnAction
 
     public RefreshAction(DependenciesView view)
     {
-        super("Reload Gradle Project", null, AllIcons.Actions.Refresh);
+        super("Check for Updates...", null, AllIcons.Actions.Refresh);
         this.view = view;
     }
 

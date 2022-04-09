@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.IOUtils;
-import org.gradle.internal.impldep.org.eclipse.jgit.util.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -34,7 +34,7 @@ public class MavenUtils
         var connection = (HttpURLConnection)new URL(url).openConnection();
         if (connection.getResponseCode() != 200)
         {
-            dependency.error = StringUtils.toLowerCase(connection.getResponseMessage());
+            dependency.error = StringUtils.toRootLowerCase(connection.getResponseMessage());
             return dependency;
         }
 
@@ -44,7 +44,11 @@ public class MavenUtils
             var matcher = Pattern.compile("<latest>(.*)</latest>").matcher(text);
             if (matcher.find())
             {
-                setLatestVersion(dependency, matcher.group(1));
+                var latestVersion = matcher.group(1);
+                if (latestVersion != null)
+                {
+                    setLatestVersion(dependency, latestVersion);
+                }
             }
         }
         catch (Exception e)
@@ -56,8 +60,6 @@ public class MavenUtils
 
     private static void setLatestVersion(Dependency dependency, String latestVersion)
     {
-        if (latestVersion == null) return;
-
         var current = parseVersion(dependency.version);
         while (current.size() < 3) current.add(0);
         var latest = parseVersion(latestVersion);

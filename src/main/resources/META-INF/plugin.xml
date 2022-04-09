@@ -12,8 +12,8 @@
     <depends>com.intellij.modules.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="Dependencies Checker" icon="/icons/toolWindow.svg" anchor="right"
-                    canCloseContents="true" doNotActivateOnStart="true"
+        <toolWindow id="Dependencies Checker" icon="/icons/toolWindow.svg"
+                    anchor="right" doNotActivateOnStart="true"
                     factoryClass="com.github.tarn2206.DependenciesToolWindowFactory"/>
     </extensions>
 
