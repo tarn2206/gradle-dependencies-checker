@@ -1,12 +1,18 @@
 package com.github.tarn2206.ui;
 
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
 
+import com.github.tarn2206.AppSettings;
+import com.github.tarn2206.actions.RefreshAction;
+import com.github.tarn2206.actions.SettingsAction;
 import com.github.tarn2206.tooling.Dependency;
 import com.github.tarn2206.tooling.GradleHelper;
 import com.github.tarn2206.tooling.MavenUtils;
@@ -23,7 +29,6 @@ import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.jetbrains.annotations.NotNull;
 
 public class DependenciesView extends SimpleToolWindowPanel
 {
@@ -35,7 +40,7 @@ public class DependenciesView extends SimpleToolWindowPanel
     private final Set<Dependency> updateSet = new HashSet<>();
     private final Queue<Dependency> updateList = new ConcurrentLinkedQueue<>();
 
-    public DependenciesView(@NotNull Project project, @NotNull ToolWindow toolWindow)
+    public DependenciesView(Project project, ToolWindow toolWindow)
     {
         super(true, true);
 
@@ -47,8 +52,7 @@ public class DependenciesView extends SimpleToolWindowPanel
 
     private void setupToolWindow(ToolWindow toolWindow)
     {
-        var refresh = new RefreshAction(this);
-        toolWindow.setTitleActions(Collections.singletonList(refresh));
+        toolWindow.setTitleActions(List.of(new RefreshAction(this), new SettingsAction()));
 
         var content = ContentFactory.SERVICE.getInstance().createContent(this, "", false);
         toolWindow.getContentManager().addContent(content);
@@ -82,14 +86,14 @@ public class DependenciesView extends SimpleToolWindowPanel
         var disposable = fromCallable(() -> GradleHelper.getProjectInfo(projectPath))
                 .subscribe(p ->
                 {
-                    addProject(rootNode, p);
+                    addProject(rootNode, p, AppSettings.getInstance());
                     tree.updateUI();
                     worker.decrementAndGet();
                 }, tr -> onError(rootNode, tr));
         disposables.add(disposable);
     }
 
-    private void addProject(DefaultMutableTreeNode node, ProjectInfo p)
+    private void addProject(DefaultMutableTreeNode node, ProjectInfo p, AppSettings settings)
     {
         var dependency = new Dependency(p.name);
         node.setUserObject(dependency);
@@ -102,7 +106,7 @@ public class DependenciesView extends SimpleToolWindowPanel
                     .subscribe(dependencies ->
                                {
                                    dependency.status = null;
-                                   addDependencies(node, dependencies);
+                                   addDependencies(node, dependencies, settings);
                                }, tr ->
                                {
                                    dependency.status = null;
@@ -115,7 +119,7 @@ public class DependenciesView extends SimpleToolWindowPanel
         {
             var child = new DefaultMutableTreeNode();
             node.add(child);
-            addProject(child, sub);
+            addProject(child, sub, settings);
         }
 
         if (node.getChildCount() > 0)
@@ -124,7 +128,7 @@ public class DependenciesView extends SimpleToolWindowPanel
         }
     }
 
-    private void addDependencies(DefaultMutableTreeNode node, List<Dependency> dependencies)
+    private void addDependencies(DefaultMutableTreeNode node, List<Dependency> dependencies, AppSettings settings)
     {
         int n = 0;
         for (var dependency : dependencies)
@@ -134,14 +138,14 @@ public class DependenciesView extends SimpleToolWindowPanel
 
             if (dependency.hasGroup() && dependency.version != null)
             {
-                checkForUpdate(dependency, child);
+                checkForUpdate(dependency, child, settings);
             }
         }
         worker.decrementAndGet();
         tree.expandPath(new TreePath(node.getPath()));
     }
 
-    private void checkForUpdate(Dependency dependency, DefaultMutableTreeNode node)
+    private void checkForUpdate(Dependency dependency, DefaultMutableTreeNode node, AppSettings settings)
     {
         dependency.status = "check for updates...";
         updateList.add(dependency);
@@ -160,7 +164,7 @@ public class DependenciesView extends SimpleToolWindowPanel
 
         updateSet.add(dependency);
         worker.incrementAndGet();
-        var disposable = fromCallable(() -> MavenUtils.checkForUpdate(dependency))
+        var disposable = fromCallable(() -> MavenUtils.checkForUpdate(dependency, settings))
                 .subscribe(result ->
                 {
                     dependency.status = null;

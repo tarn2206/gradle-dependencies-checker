@@ -1,12 +1,21 @@
 package com.github.tarn2206.tooling;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.X509TrustManager;
 
+import com.github.tarn2206.AppSettings;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -14,48 +23,134 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class MavenUtils
 {
-    private static final String MAVEN_CENTRAL = "https://repo.maven.apache.org/maven2/";
-    private static final String ANDROID_MAVEN = "https://dl.google.com/dl/android/maven2/";
-
     private MavenUtils()
     {}
 
-    public static Dependency checkForUpdate(Dependency dependency) throws IOException
+    public static Dependency checkForUpdate(Dependency dependency, AppSettings settings)
     {
-        String url;
-        if (dependency.group.contains("android") || dependency.group.contains("firebase"))
+        var activeList = settings.repos.stream().filter(repo -> repo.active).collect(Collectors.toList());
+        for (var repo : activeList)
         {
-            url = ANDROID_MAVEN + dependency.group.replace('.', '/') + "/" + dependency.name + "/maven-metadata.xml";
+            try
+            {
+                var url = combine(repo.url, dependency.group.replace('.', '/') + "/" + dependency.name + "/maven-metadata.xml");
+                var connection = openConnection(url);
+                if (connection.getResponseCode() == 200)
+                {
+                    parseMetadata(connection.getInputStream(), dependency, settings);
+                    break;
+                }
+
+                dependency.error = connection.getResponseMessage();
+            }
+            catch (Exception e)
+            {
+                dependency.error = e.getMessage();
+            }
+        }
+        return dependency;
+    }
+
+    private static String combine(String a, String b)
+    {
+        return a.endsWith("/") ? a + b : a + "/" + b;
+    }
+
+    private static HttpURLConnection openConnection(String url) throws GeneralSecurityException, IOException
+    {
+        var connection = new URL(url).openConnection();
+        if (connection instanceof HttpsURLConnection)
+        {
+            var sslContext = SSLContext.getInstance("SSL");
+            sslContext.init(null, new X509TrustManager[] {
+                new X509TrustManager()
+                {
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] chain, String authType)
+                    {/*ignored*/}
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] chain, String authType)
+                    {/*ignored*/}
+
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers()
+                    {
+                        return new X509Certificate[0];
+                    }
+                }
+            }, new SecureRandom());
+            var httpsConnection = (HttpsURLConnection)connection;
+            httpsConnection.setSSLSocketFactory(sslContext.getSocketFactory());
+            httpsConnection.setHostnameVerifier((hostname, session) -> true);
+        }
+        return (HttpURLConnection)connection;
+    }
+
+    public static void parseMetadata(InputStream in, Dependency dependency, AppSettings settings) throws IOException
+    {
+        var text = IOUtils.toString(in, UTF_8);
+        var latestVersion = findLatestVersion(text, settings);
+        if (latestVersion == null)
+        {
+            latestVersion = scanForStableVersion(text, settings);
+        }
+        if (latestVersion != null)
+        {
+            setLatestVersion(dependency, latestVersion);
+            dependency.error = null;
+        }
+    }
+
+    private static String findLatestVersion(String text, AppSettings settings)
+    {
+        String latestVersion = null;
+        var matcher = Pattern.compile("<latest>(.*)</latest>").matcher(text);
+        if (matcher.find())
+        {
+            latestVersion = matcher.group(1);
         }
         else
         {
-            url = MAVEN_CENTRAL + dependency.group.replace('.', '/') + "/" + dependency.name + "/maven-metadata.xml";
-        }
-        var connection = (HttpURLConnection)new URL(url).openConnection();
-        if (connection.getResponseCode() != 200)
-        {
-            dependency.error = StringUtils.toRootLowerCase(connection.getResponseMessage());
-            return dependency;
-        }
-
-        try
-        {
-            var text = IOUtils.toString(connection.getInputStream(), UTF_8);
-            var matcher = Pattern.compile("<latest>(.*)</latest>").matcher(text);
+            matcher = Pattern.compile("<release>(.*)</release>").matcher(text);
             if (matcher.find())
             {
-                var latestVersion = matcher.group(1);
-                if (latestVersion != null)
-                {
-                    setLatestVersion(dependency, latestVersion);
-                }
+                latestVersion = matcher.group(1);
             }
         }
-        catch (Exception e)
+        if (latestVersion != null && settings.ignoreUnstable && !isStable(latestVersion, settings.unstablePatterns))
         {
-            dependency.error = e.getMessage();
+            latestVersion = null;
         }
-        return dependency;
+        return latestVersion;
+    }
+
+    private static String scanForStableVersion(String text, AppSettings settings)
+    {
+        String latestVersion = null;
+        var matcher = Pattern.compile("<version>(.*)</version>").matcher(text);
+        while (matcher.find())
+        {
+            var version = matcher.group(1);
+            if (!settings.ignoreUnstable || isStable(version, settings.unstablePatterns))
+            {
+                latestVersion = version;
+            }
+        }
+        return latestVersion;
+    }
+
+    private static boolean isStable(String version, String patterns)
+    {
+        if (StringUtils.isBlank(patterns)) return true;
+
+        var array = patterns.split(",");
+        for (var pattern : array)
+        {
+            pattern = StringUtils.trimToEmpty(pattern);
+            if (!pattern.isEmpty() && StringUtils.containsIgnoreCase(version, pattern)) return false;
+        }
+        return true;
     }
 
     private static void setLatestVersion(Dependency dependency, String latestVersion)

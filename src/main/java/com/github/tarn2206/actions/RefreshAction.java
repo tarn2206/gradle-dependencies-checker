@@ -1,5 +1,6 @@
-package com.github.tarn2206.ui;
+package com.github.tarn2206.actions;
 
+import com.github.tarn2206.ui.DependenciesView;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;

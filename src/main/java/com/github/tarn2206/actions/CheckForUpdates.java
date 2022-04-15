@@ -1,11 +1,11 @@
-package com.github.tarn2206;
+package com.github.tarn2206.actions;
 
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.wm.ToolWindowManager;
 import org.jetbrains.annotations.NotNull;
 
-public class DependenciesUpdateAction extends AnAction
+public class CheckForUpdates extends AnAction
 {
     private static final String TOOL_WINDOW_ID = "Dependencies Checker";
 

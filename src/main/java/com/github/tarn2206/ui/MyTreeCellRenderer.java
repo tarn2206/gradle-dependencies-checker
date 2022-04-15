@@ -73,13 +73,14 @@ public class MyTreeCellRenderer extends ColoredTreeCellRenderer
             append(dependency.toString());
         }
 
-        if (dependency.error != null)
-        {
-            append(" " + dependency.error, ERROR_ATTRIBUTES);
-        }
         if (dependency.status != null)
         {
             append(", " + dependency.status, GRAY_ATTRIBUTES);
+        }
+        else if (dependency.error != null)
+        {
+            append(" - ");
+            append(dependency.error, ERROR_ATTRIBUTES);
         }
     }
 }

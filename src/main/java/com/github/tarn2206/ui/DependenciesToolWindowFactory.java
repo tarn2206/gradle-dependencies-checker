@@ -1,6 +1,5 @@
-package com.github.tarn2206;
+package com.github.tarn2206.ui;
 
-import com.github.tarn2206.ui.DependenciesView;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;

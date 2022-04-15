@@ -12,14 +12,15 @@
     <depends>com.intellij.modules.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceImplementation="com.github.tarn2206.AppSettings"/>
         <toolWindow id="Dependencies Checker" icon="/icons/toolWindow.svg"
                     anchor="right" doNotActivateOnStart="true"
-                    factoryClass="com.github.tarn2206.DependenciesToolWindowFactory"/>
+                    factoryClass="com.github.tarn2206.ui.DependenciesToolWindowFactory"/>
     </extensions>
 
     <actions>
         <action id="DependenciesUpdatesAction"
-                class="com.github.tarn2206.DependenciesUpdateAction"
+                class="com.github.tarn2206.actions.CheckForUpdates"
                 text="Check Dependencies Updates">
             <add-to-group group-id="AnalyzeActions"/>
         </action>
