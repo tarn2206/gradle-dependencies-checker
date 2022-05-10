@@ -88,7 +88,7 @@ public class GradleHelper
                 var line = scanner.nextLine();
                 if (line.startsWith("compileClasspath - ") || line.startsWith("runtimeClasspath - ")
                     || line.startsWith("testCompileClasspath - ") || line.startsWith("testRuntimeClasspath - ")
-                    || line.startsWith("debugRuntimeClasspath - ")) // android
+                    || line.startsWith("testImplementation - ") || line.startsWith("debugRuntimeClasspath - ")) // android
                 {
                     inBlock = true;
                 }

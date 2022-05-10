@@ -1,4 +1,4 @@
-Gradle Dependencies Check for Updates
+Checking for new gradle dependency updates
 ========================================
 
 [![Build Status](https://travis-ci.com/tarn2206/gradle-dependencies-checker.svg?branch=develop)](https://travis-ci.com/github/tarn2206/gradle-dependencies-checker)

@@ -7,7 +7,7 @@ import org.jetbrains.annotations.NotNull;
 
 public class CheckForUpdates extends AnAction
 {
-    private static final String TOOL_WINDOW_ID = "Dependencies Checker";
+    private static final String TOOL_WINDOW_ID = "com.github.tarn2206.dependency.updates";
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e)

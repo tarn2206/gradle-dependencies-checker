@@ -25,7 +25,7 @@ public class SettingsDialog extends DialogWrapper
     {
         super(true);
         setResizable(false);
-        setTitle("Dependencies Checker Settings");
+        setTitle("Dependency Updates");
         init();
     }
 

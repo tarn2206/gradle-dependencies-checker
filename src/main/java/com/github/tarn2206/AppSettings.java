@@ -15,7 +15,7 @@ import org.jetbrains.annotations.Nullable;
 public class AppSettings implements PersistentStateComponent<AppSettings>
 {
     public List<Repo> repos;
-    public Boolean ignoreUnstable;
+    public boolean ignoreUnstable = true;
     public String unstablePatterns;
 
     public static AppSettings getInstance()
@@ -26,7 +26,6 @@ public class AppSettings implements PersistentStateComponent<AppSettings>
             settings.repos = List.of(new AppSettings.Repo(true, "Maven Central", "https://repo.maven.apache.org/maven2"),
                                      new AppSettings.Repo(true, "Google’s Android", "https://dl.google.com/dl/android/maven2"));
         }
-        if (settings.ignoreUnstable == null) settings.ignoreUnstable = true;
         if (settings.ignoreUnstable && StringUtils.isBlank(settings.unstablePatterns))
         {
             settings.unstablePatterns = "alpha, beta, -M, incubator, rc, snapshot";

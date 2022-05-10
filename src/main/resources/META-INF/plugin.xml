@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>tarn.gradle.dependencies</id>
-    <name>Gradle Dependencies Checker</name>
+    <name>Gradle Dependency Updates</name>
     <vendor email="tarn.net@gmail.com" url="https://github.com/tarn2206">t@rn</vendor>
 
     <description><![CDATA[
@@ -13,15 +13,16 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="com.github.tarn2206.AppSettings"/>
-        <toolWindow id="Dependencies Checker" icon="/icons/toolWindow.svg"
+        <toolWindow id="com.github.tarn2206.dependency.updates"
+                    icon="/icons/toolWindow.svg"
                     anchor="right" doNotActivateOnStart="true"
                     factoryClass="com.github.tarn2206.ui.DependenciesToolWindowFactory"/>
     </extensions>
 
     <actions>
-        <action id="DependenciesUpdatesAction"
+        <action id="CheckDependencyUpdates"
                 class="com.github.tarn2206.actions.CheckForUpdates"
-                text="Check Dependencies Updates">
+                text="Check Dependency Updates">
             <add-to-group group-id="AnalyzeActions"/>
         </action>
     </actions>

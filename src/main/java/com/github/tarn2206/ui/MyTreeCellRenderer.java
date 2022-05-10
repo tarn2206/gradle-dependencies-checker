@@ -19,7 +19,7 @@ import static com.intellij.ui.SimpleTextAttributes.STYLE_WAVED;
 
 public class MyTreeCellRenderer extends ColoredTreeCellRenderer
 {
-    public static final SimpleTextAttributes ORANGE_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(new Color(0xeda200), new Color(0xf0a732)));
+    public static final SimpleTextAttributes ORANGE_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(new Color(0xf29a32), new Color(0xf0a732)));
     public static final SimpleTextAttributes CYAN_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(new Color(0x40b6e0), new Color(0x40b6e0)));
     public static final SimpleTextAttributes GREEN_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, new JBColor(new Color(0x59A869), new Color(0x499C54)));
     public static final SimpleTextAttributes WAVE_ATTRIBUTES = new SimpleTextAttributes(STYLE_WAVED, null, new JBColor(new Color(0xff0e14), new Color(0xe85259)));
