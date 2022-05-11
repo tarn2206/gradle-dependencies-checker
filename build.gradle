@@ -3,7 +3,7 @@ plugins {
 }
 
 group 'com.github.tarn2206'
-version '1.6.1'
+version '1.6.2'
 sourceCompatibility = 11
 targetCompatibility = 11
 
@@ -29,6 +29,10 @@ buildSearchableOptions.enabled = false
 
 patchPluginXml {
     changeNotes = """
+<h2>1.6.2</h2>
+<ul>
+    <li>Fix tool window title</li>
+</ul>
 <h2>1.6.1</h2>
 <ul>
     <li>Fix not detect android test implementation</li>

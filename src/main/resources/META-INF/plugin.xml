@@ -13,7 +13,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="com.github.tarn2206.AppSettings"/>
-        <toolWindow id="com.github.tarn2206.dependency.updates"
+        <toolWindow id="Dependency Updates"
                     icon="/icons/toolWindow.svg"
                     anchor="right" doNotActivateOnStart="true"
                     factoryClass="com.github.tarn2206.ui.DependenciesToolWindowFactory"/>
