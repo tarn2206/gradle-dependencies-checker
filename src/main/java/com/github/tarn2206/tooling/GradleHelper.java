@@ -86,9 +86,9 @@ public class GradleHelper
             while (scanner.hasNext())
             {
                 var line = scanner.nextLine();
-                if (line.startsWith("compileClasspath - ") || line.startsWith("runtimeClasspath - ")
-                    || line.startsWith("testCompileClasspath - ") || line.startsWith("testRuntimeClasspath - ")
-                    || line.startsWith("testImplementation - ") || line.startsWith("debugRuntimeClasspath - ")) // android
+                if (StringUtils.containsIgnoreCase(line, "compileClasspath - ")
+                        || StringUtils.containsIgnoreCase(line, "runtimeClasspath - ")
+                        || StringUtils.containsIgnoreCase(line, "implementation - "))
                 {
                     inBlock = true;
                 }
@@ -112,7 +112,10 @@ public class GradleHelper
 
     private static Dependency parseDependency(String s)
     {
-        var a = s.split(":");
+        if (s.startsWith("project :")) return null;
+
+        var clean = s.replaceAll("\\{strictly (.*)}", "$1");
+        var a = clean.split(":");
         if (a.length < 2) return null;
 
         if (a.length > 2)
