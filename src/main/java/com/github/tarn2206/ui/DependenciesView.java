@@ -17,6 +17,7 @@ import com.github.tarn2206.tooling.Dependency;
 import com.github.tarn2206.tooling.GradleHelper;
 import com.github.tarn2206.tooling.MavenUtils;
 import com.github.tarn2206.tooling.ProjectInfo;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
@@ -47,15 +48,17 @@ public class DependenciesView extends SimpleToolWindowPanel
         setupToolWindow(toolWindow);
 
         projectPath = project.getBasePath();
-        StartupManager.getInstance(project).runWhenProjectIsInitialized(this::run);
+        StartupManager.getInstance(project).runAfterOpened(this::run);
     }
 
     private void setupToolWindow(ToolWindow toolWindow)
     {
         toolWindow.setTitleActions(List.of(new RefreshAction(this), new SettingsAction()));
 
-        var content = ContentFactory.SERVICE.getInstance().createContent(this, "", false);
+        var contentFactory = ApplicationManager.getApplication().getService(ContentFactory.class);
+        var content = contentFactory.createContent(this, "", false);
         toolWindow.getContentManager().addContent(content);
+
         rootNode = new DefaultMutableTreeNode();
         tree = new Tree(rootNode);
         tree.setCellRenderer(new MyTreeCellRenderer());
@@ -130,7 +133,7 @@ public class DependenciesView extends SimpleToolWindowPanel
 
     private void addDependencies(DefaultMutableTreeNode node, List<Dependency> dependencies, AppSettings settings)
     {
-        int n = 0;
+        var n = 0;
         for (var dependency : dependencies)
         {
             var child = new DefaultMutableTreeNode(dependency);
@@ -192,8 +195,17 @@ public class DependenciesView extends SimpleToolWindowPanel
         var rootCause = ExceptionUtils.getRootCause(tr);
         if (rootCause == null) rootCause = tr;
 
-        var child = new DefaultMutableTreeNode(rootCause);
-        node.insert(child, 0);
+        if (node.equals(rootNode))
+        {
+            rootNode.setUserObject(rootCause);
+            tree.updateUI();
+        }
+        else
+        {
+            var child = new DefaultMutableTreeNode(rootCause);
+            node.insert(child, 0);
+            tree.expandPath(new TreePath(node.getPath()));
+        }
     }
 
     private static <T> Single<? extends T> fromCallable(Callable<? extends T> callable)

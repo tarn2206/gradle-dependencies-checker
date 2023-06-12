@@ -19,6 +19,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.X509TrustManager;
 
 import com.github.tarn2206.AppSettings;
+import com.intellij.openapi.diagnostic.Logger;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -26,6 +27,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class MavenUtils
 {
+    private static final Logger LOG = Logger.getInstance(MavenUtils.class);
+
     private MavenUtils()
     {}
 
@@ -40,15 +43,22 @@ public class MavenUtils
                 var connection = (HttpURLConnection)openConnection(url);
                 if (connection.getResponseCode() == 200)
                 {
-                    parseMetadata(connection.getInputStream(), dependency, settings);
+                    var latestVersion = getLatestVersion(connection.getInputStream(), settings);
+                    if (latestVersion != null)
+                    {
+                        setLatestVersion(dependency, latestVersion);
+                        dependency.error = null;
+                    }
                     break;
                 }
 
                 dependency.error = connection.getResponseMessage();
+                LOG.warn(connection.getResponseCode() + " " + url);
             }
             catch (Exception e)
             {
                 dependency.error = e.getMessage();
+                LOG.error(e);
             }
         }
         return dependency;
@@ -101,57 +111,36 @@ public class MavenUtils
         }
     }
 
-    public static void parseMetadata(InputStream in, Dependency dependency, AppSettings settings) throws IOException
+    public static String getLatestVersion(InputStream in, AppSettings settings) throws IOException
     {
         var text = IOUtils.toString(in, UTF_8);
-        var latestVersion = findLatestVersion(text, settings);
-        if (latestVersion == null)
+        var latest = find("<latest>(.*)</latest>", text);
+        if (StringUtils.isBlank(latest))
         {
-            latestVersion = scanForStableVersion(text, settings);
+            latest = find("<release>(.*)</release>", text);
         }
-        if (latestVersion != null)
+        if (StringUtils.isNotBlank(latest) && (!settings.ignoreUnstable || isStable(latest, settings.unstablePatterns)))
         {
-            setLatestVersion(dependency, latestVersion);
-            dependency.error = null;
+            return latest;
         }
-    }
 
-    private static String findLatestVersion(String text, AppSettings settings)
-    {
-        String latestVersion = null;
-        var matcher = Pattern.compile("<latest>(.*)</latest>").matcher(text);
-        if (matcher.find())
-        {
-            latestVersion = matcher.group(1);
-        }
-        else
-        {
-            matcher = Pattern.compile("<release>(.*)</release>").matcher(text);
-            if (matcher.find())
-            {
-                latestVersion = matcher.group(1);
-            }
-        }
-        if (latestVersion != null && settings.ignoreUnstable && !isStable(latestVersion, settings.unstablePatterns))
-        {
-            latestVersion = null;
-        }
-        return latestVersion;
-    }
-
-    private static String scanForStableVersion(String text, AppSettings settings)
-    {
-        String latestVersion = null;
+        latest = null;
         var matcher = Pattern.compile("<version>(.*)</version>").matcher(text);
         while (matcher.find())
         {
             var version = matcher.group(1);
             if (!settings.ignoreUnstable || isStable(version, settings.unstablePatterns))
             {
-                latestVersion = version;
+                latest = version;
             }
         }
-        return latestVersion;
+        return latest;
+    }
+
+    private static String find(String regex, String input)
+    {
+        var matcher = Pattern.compile(regex).matcher(input);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     private static boolean isStable(String version, String patterns)
