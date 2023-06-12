@@ -40,8 +40,8 @@ public class SettingsDialog extends DialogWrapper
         panel.add(label, new GridConstraints(0, 0, 1, 1, 8, 0, 0, 0, null, null, null));
 
         table = new RepositoryTable();
-        table.setPreferredSize(new Dimension(720, 200));
-        panel.add(table, new GridConstraints(1, 0, 1, 1, 0, 3, 3, 2, null, new Dimension(700, 200), null));
+        table.setPreferredSize(new Dimension(800, 240));
+        panel.add(table, new GridConstraints(1, 0, 1, 1, 0, 3, 3, 2, null, new Dimension(780, 240), null));
 
         ignoreUnstable = new JBCheckBox("Ignore unstable version");
         ignoreUnstable.addActionListener(e -> unstablePatterns.setEnabled(ignoreUnstable.isSelected()));
@@ -64,7 +64,7 @@ public class SettingsDialog extends DialogWrapper
     private static JPanel wrap(JComponent component)
     {
         var layout = new GridLayoutManager(1, 1);
-        layout.setMargin(JBUI.insets(10, 0, 0, 0));
+        layout.setMargin(JBUI.insetsTop(10));
         var panel = new JPanel(layout);
         panel.add(component, new GridConstraints(0, 0, 1, 1, 8, 0, 3, 0, null, null, null));
         return panel;

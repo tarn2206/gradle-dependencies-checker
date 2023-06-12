@@ -3,11 +3,14 @@ package com.github.tarn2206.tooling;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
+import java.net.URLConnection;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -34,7 +37,7 @@ public class MavenUtils
             try
             {
                 var url = combine(repo.url, dependency.group.replace('.', '/') + "/" + dependency.name + "/maven-metadata.xml");
-                var connection = openConnection(url);
+                var connection = (HttpURLConnection)openConnection(url);
                 if (connection.getResponseCode() == 200)
                 {
                     parseMetadata(connection.getInputStream(), dependency, settings);
@@ -56,35 +59,46 @@ public class MavenUtils
         return a.endsWith("/") ? a + b : a + "/" + b;
     }
 
-    private static HttpURLConnection openConnection(String url) throws GeneralSecurityException, IOException
+    private static URLConnection openConnection(String url) throws GeneralSecurityException, IOException
     {
         var connection = new URL(url).openConnection();
         if (connection instanceof HttpsURLConnection)
         {
-            var sslContext = SSLContext.getInstance("SSL");
-            sslContext.init(null, new X509TrustManager[] {
-                new X509TrustManager()
+            X509TrustManager trustAll = new X509TrustManager()
+            {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType)
+                {/*ignored*/}
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType)
+                {/*ignored*/}
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers()
                 {
-                    @Override
-                    public void checkClientTrusted(X509Certificate[] chain, String authType)
-                    {/*ignored*/}
-
-                    @Override
-                    public void checkServerTrusted(X509Certificate[] chain, String authType)
-                    {/*ignored*/}
-
-                    @Override
-                    public X509Certificate[] getAcceptedIssuers()
-                    {
-                        return new X509Certificate[0];
-                    }
+                    return new X509Certificate[0];
                 }
-            }, new SecureRandom());
+            };
+            var sslContext = SSLContext.getInstance("SSL");
+            sslContext.init(null, new X509TrustManager[] { trustAll }, new SecureRandom());
             var httpsConnection = (HttpsURLConnection)connection;
             httpsConnection.setSSLSocketFactory(sslContext.getSocketFactory());
             httpsConnection.setHostnameVerifier((hostname, session) -> true);
         }
-        return (HttpURLConnection)connection;
+        setAuthentication(connection, url);
+        return connection;
+    }
+
+    private static void setAuthentication(URLConnection connection, String url)
+    {
+        var uri = URI.create(url);
+        var credentials = uri.getUserInfo();
+        if (StringUtils.isNotBlank(credentials))
+        {
+            var authorization = "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(UTF_8));
+            connection.setRequestProperty("Authorization", authorization);
+        }
     }
 
     public static void parseMetadata(InputStream in, Dependency dependency, AppSettings settings) throws IOException

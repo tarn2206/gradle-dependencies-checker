@@ -3,7 +3,7 @@ plugins {
 }
 
 group 'com.github.tarn2206'
-version '1.6.2'
+version '1.6.3'
 sourceCompatibility = 11
 targetCompatibility = 11
 
@@ -13,7 +13,7 @@ repositories {
 
 dependencies {
     implementation gradleApi()
-    implementation 'io.reactivex.rxjava3:rxjava:3.1.4'
+    implementation 'io.reactivex.rxjava3:rxjava:3.1.6'
     implementation 'com.github.akarnokd:rxjava3-swing:3.1.1'
 
     testImplementation 'junit:junit:4.13.2'
@@ -24,11 +24,19 @@ intellij {
     version = 'IC-2020.3'
     updateSinceUntilBuild = false
 }
+// See https://plugins.jetbrains.com/docs/intellij/build-number-ranges.html#intellij-platform-based-products-of-recent-ide-versions
 
 buildSearchableOptions.enabled = false
 
 patchPluginXml {
+    sinceBuild = '203'
+    untilBuild = '232.*'
     changeNotes = """
+<h2>1.6.3</h2>
+<ul>
+    <li>Support access private maven repository by using credentials in the URL<br>https://username:password@www.example.com/</li>
+    <li>Improve Android project support</li>
+</ul>
 <h2>1.6.2</h2>
 <ul>
     <li>Fix tool window title</li>
