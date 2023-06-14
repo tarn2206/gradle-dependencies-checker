@@ -20,30 +20,34 @@ public class GradleHelper
     private GradleHelper()
     {}
 
-    public static ProjectInfo getProjectInfo(String projectPath) throws IOException
+    public static ProjectInfo getProjectInfo(String projectPath, String sdkHome) throws IOException
     {
         var connector = newConnector(projectPath, new File(projectPath));
         try (var connection = connector.connect())
         {
-            return create(connection.getModel(GradleProject.class));
+            var builder = connection.model(GradleProject.class);
+            if (sdkHome != null) builder.setJavaHome(new File(sdkHome));
+            return getInfo(builder.get());
         }
     }
 
-    private static ProjectInfo create(GradleProject gradleProject)
+    private static ProjectInfo getInfo(GradleProject gradleProject)
     {
-        var children = gradleProject.getChildren().stream().map(GradleHelper::create).collect(Collectors.toList());
+        var children = gradleProject.getChildren().stream().map(GradleHelper::getInfo).collect(Collectors.toList());
         return new ProjectInfo(gradleProject.getName(), gradleProject.getBuildScript().getSourceFile(), children);
     }
 
-    public static List<Dependency> getDependencies(String projectPath, File projectDirectory) throws IOException
+    public static List<Dependency> getDependencies(String projectPath, String sdkHome, File projectDirectory)
+            throws IOException
     {
         var connector = newConnector(projectPath, projectDirectory);
         try (var connection = connector.connect(); var out = new ByteArrayOutputStream())
         {
-            connection.newBuild()
-                   .forTasks("dependencies")
-                   .setStandardOutput(out)
-                   .run();
+            var buildLauncher = connection.newBuild();
+            if (sdkHome != null) buildLauncher.setJavaHome(new File(sdkHome));
+            buildLauncher.forTasks("dependencies")
+                         .setStandardOutput(out)
+                         .run();
             return parseDependencies(out.toString());
         }
     }

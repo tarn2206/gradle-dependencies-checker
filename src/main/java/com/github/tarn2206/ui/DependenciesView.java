@@ -19,6 +19,7 @@ import com.github.tarn2206.tooling.MavenUtils;
 import com.github.tarn2206.tooling.ProjectInfo;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
 import com.intellij.openapi.wm.ToolWindow;
@@ -34,6 +35,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 public class DependenciesView extends SimpleToolWindowPanel
 {
     private final String projectPath;
+    private final String sdkHome;
     private Tree tree;
     private DefaultMutableTreeNode rootNode;
     private final AtomicInteger worker = new AtomicInteger();
@@ -48,6 +50,8 @@ public class DependenciesView extends SimpleToolWindowPanel
         setupToolWindow(toolWindow);
 
         projectPath = project.getBasePath();
+        var sdk = ProjectRootManager.getInstance(project).getProjectSdk();
+        sdkHome = sdk == null ? null : sdk.getHomePath();
         StartupManager.getInstance(project).runAfterOpened(this::run);
     }
 
@@ -86,7 +90,7 @@ public class DependenciesView extends SimpleToolWindowPanel
         tree.updateUI();
         if (disposables != null) disposables.dispose();
         disposables = new CompositeDisposable();
-        var disposable = fromCallable(() -> GradleHelper.getProjectInfo(projectPath))
+        var disposable = fromCallable(() -> GradleHelper.getProjectInfo(projectPath, sdkHome))
                 .subscribe(p ->
                 {
                     addProject(rootNode, p, AppSettings.getInstance());
@@ -105,16 +109,17 @@ public class DependenciesView extends SimpleToolWindowPanel
         {
             worker.incrementAndGet();
             dependency.status = "loading...";
-            var disposable = fromCallable(() -> GradleHelper.getDependencies(projectPath, p.buildFile.getParentFile()))
-                    .subscribe(dependencies ->
-                               {
-                                   dependency.status = null;
-                                   addDependencies(node, dependencies, settings);
-                               }, tr ->
-                               {
-                                   dependency.status = null;
-                                   onError(node, tr);
-                               });
+            var disposable = fromCallable(() ->
+                GradleHelper.getDependencies(projectPath, sdkHome, p.buildFile.getParentFile()))
+                            .subscribe(dependencies ->
+                            {
+                                dependency.status = null;
+                                addDependencies(node, dependencies, settings);
+                            }, tr ->
+                            {
+                                dependency.status = null;
+                                onError(node, tr);
+                            });
             disposables.add(disposable);
         }
 
