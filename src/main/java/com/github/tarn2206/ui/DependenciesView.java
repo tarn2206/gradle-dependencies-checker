@@ -52,7 +52,7 @@ public class DependenciesView extends SimpleToolWindowPanel
         projectPath = project.getBasePath();
         var sdk = ProjectRootManager.getInstance(project).getProjectSdk();
         sdkHome = sdk == null ? null : sdk.getHomePath();
-        StartupManager.getInstance(project).runAfterOpened(this::run);
+        run();
     }
 
     private void setupToolWindow(ToolWindow toolWindow)

@@ -1,18 +1,22 @@
 package com.github.tarn2206.ui;
 
 import java.awt.Dimension;
+import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.plaf.FontUIResource;
 
 import com.github.tarn2206.AppSettings;
 import com.intellij.openapi.ui.DialogWrapper;
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBTextField;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.uiDesigner.core.GridConstraints;
 import com.intellij.uiDesigner.core.GridLayoutManager;
 import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.UI;
+import com.intellij.util.ui.UIUtil;
 
 public class SettingsDialog extends DialogWrapper
 {
@@ -43,34 +47,49 @@ public class SettingsDialog extends DialogWrapper
         table.setPreferredSize(new Dimension(800, 240));
         panel.add(table, new GridConstraints(1, 0, 1, 1, 0, 3, 3, 2, null, new Dimension(780, 240), null));
 
-        ignoreUnstable = new JBCheckBox("Ignore unstable version");
-        ignoreUnstable.addActionListener(e -> unstablePatterns.setEnabled(ignoreUnstable.isSelected()));
-        panel.add(wrap(ignoreUnstable), new GridConstraints(2, 0, 1, 1, 8, 0, 3, 0, null, null, null));
+        panel.add(createCheckboxPanel(), new GridConstraints(2, 0, 1, 1, 8, 0, 3, 0, null, null, null));
+        panel.add(createUnstablePanel(), new GridConstraints(3, 0, 1, 1, 0, 3, 3, 0, null, null, null));
 
-        var panel1 = new JPanel(new GridLayoutManager(1, 2));
-        panel.add(panel1, new GridConstraints(3, 0, 1, 1, 0, 3, 3, 0, null, null, null));
-
-        unstablePatterns = new JBTextField();
-        var panel2 = UI.PanelFactory.panel(unstablePatterns)
-                                    .withComment("   Comma separated list of unstable version patterns")
-                                    .createPanel();
-        panel1.add(panel2, new GridConstraints(0, 1, 1, 1, 0, 3, 3, 3, null, null, null));
-
-        load();
+        loadSettings();
 
         return panel;
     }
 
-    private static JPanel wrap(JComponent component)
+    private JPanel createCheckboxPanel()
     {
+        ignoreUnstable = new JBCheckBox("Ignore unstable version");
+        ignoreUnstable.addActionListener(e -> unstablePatterns.setEnabled(ignoreUnstable.isSelected()));
+
         var layout = new GridLayoutManager(1, 1);
         layout.setMargin(JBUI.insetsTop(10));
         var panel = new JPanel(layout);
-        panel.add(component, new GridConstraints(0, 0, 1, 1, 8, 0, 3, 0, null, null, null));
+        panel.add(ignoreUnstable, new GridConstraints(0, 0, 1, 1, 8, 0, 3, 0, null, null, null));
         return panel;
     }
 
-    public void load()
+    private JPanel createUnstablePanel()
+    {
+        var layout = new GridLayoutManager(2, 2);
+        layout.setVGap(0);
+        var panel = new JPanel(layout);
+        unstablePatterns = new JBTextField();
+        panel.add(unstablePatterns, new GridConstraints(0, 1, 1, 1, 0, 3, 3, 3, null, null, null));
+
+        var hint = new JLabel("Comma separated list of unstable version patterns");
+        hint.setForeground(UIUtil.getContextHelpForeground());
+        if (SystemInfo.isMac)
+        {
+            var font = hint.getFont();
+            var size = font.getSize2D();
+            font = new FontUIResource(font.deriveFont(size - JBUIScale.scale(2))); // Allow to reset the font by UI
+            hint.setFont(font);
+        }
+        hint.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
+        panel.add(hint, new GridConstraints(1, 1, 1, 1, 0, 3, 3, 3, null, null, null));
+        return panel;
+    }
+
+    public void loadSettings()
     {
         table.setRepos(settings.repos);
 
@@ -79,7 +98,7 @@ public class SettingsDialog extends DialogWrapper
         unstablePatterns.setText(settings.unstablePatterns);
     }
 
-    public void save()
+    public void saveSettings()
     {
         settings.repos = table.getRepos();
         settings.ignoreUnstable = ignoreUnstable.isSelected();

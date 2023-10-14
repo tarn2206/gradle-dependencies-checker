@@ -19,7 +19,7 @@ public class SettingsAction extends AnAction
         var dialog = new SettingsDialog();
         if (dialog.showAndGet())
         {
-            dialog.save();
+            dialog.saveSettings();
         }
     }
 }
