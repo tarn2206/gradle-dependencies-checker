@@ -3,7 +3,7 @@ plugins {
 }
 
 group 'com.github.tarn2206'
-version '1.6.4'
+version '1.6.5'
 sourceCompatibility = 11
 targetCompatibility = 11
 
@@ -30,8 +30,12 @@ buildSearchableOptions.enabled = false
 
 patchPluginXml {
     sinceBuild = '203'
-    untilBuild = '232.*'
+    untilBuild = '233.*'
     changeNotes = """
+<h2>1.6.5</h2>
+<ul>
+    <li>Support Intellij build version 233.*
+</ul>
 <h2>1.6.4</h2>
 <ul>
     <li>Remove deprecated and internal api usage</li>
