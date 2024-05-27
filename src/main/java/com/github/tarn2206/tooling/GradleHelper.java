@@ -2,78 +2,74 @@ package com.github.tarn2206.tooling;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Properties;
 import java.util.Scanner;
 import java.util.stream.Collectors;
 
+import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.roots.ProjectRootManager;
+import com.intellij.openapi.util.Pair;
 import org.apache.commons.lang3.StringUtils;
 import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.model.GradleProject;
+import org.jetbrains.plugins.gradle.GradleManager;
+import org.jetbrains.plugins.gradle.util.GradleConstants;
 
 public class GradleHelper
 {
-    private GradleHelper()
-    {}
+    private GradleHelper() {}
 
-    public static ProjectInfo getProjectInfo(String projectPath, String sdkHome) throws IOException
+    public static ProjectInfo getProjectInfo(Project project)
     {
-        var connector = newConnector(projectPath, new File(projectPath));
+        if (project.getBasePath() == null) return null;
+        var connector = createConnector(project, new File(project.getBasePath()));
         try (var connection = connector.connect())
         {
             var builder = connection.model(GradleProject.class);
-            if (sdkHome != null) builder.setJavaHome(new File(sdkHome));
-            return getInfo(builder.get());
+            var projectSdk = ProjectRootManager.getInstance(project).getProjectSdk();
+            if (projectSdk != null && projectSdk.getHomePath() != null)
+            {
+                builder.setJavaHome(new File(projectSdk.getHomePath()));
+            }
+            return getProjectInfo(builder.get());
         }
     }
 
-    private static ProjectInfo getInfo(GradleProject gradleProject)
+    private static ProjectInfo getProjectInfo(GradleProject gradleProject)
     {
-        var children = gradleProject.getChildren().stream().map(GradleHelper::getInfo).collect(Collectors.toList());
+        var children = gradleProject.getChildren().stream().map(GradleHelper::getProjectInfo).collect(Collectors.toList());
         return new ProjectInfo(gradleProject.getName(), gradleProject.getBuildScript().getSourceFile(), children);
     }
 
-    public static List<Dependency> getDependencies(String projectPath, String sdkHome, File projectDirectory)
-            throws IOException
+    public static List<Dependency> getDependencies(Project project, File projectDirectory) throws IOException
     {
-        var connector = newConnector(projectPath, projectDirectory);
+        var connector = createConnector(project, projectDirectory);
         try (var connection = connector.connect(); var out = new ByteArrayOutputStream())
         {
             var buildLauncher = connection.newBuild();
-            if (sdkHome != null) buildLauncher.setJavaHome(new File(sdkHome));
-            buildLauncher.forTasks("dependencies")
-                         .setStandardOutput(out)
-                         .run();
+            var projectSdk = ProjectRootManager.getInstance(project).getProjectSdk();
+            if (projectSdk != null && projectSdk.getHomePath() != null)
+            {
+                buildLauncher.setJavaHome(new File(projectSdk.getHomePath()));
+            }
+            buildLauncher.forTasks("dependencies").setStandardOutput(out).run();
             return parseDependencies(out.toString());
         }
     }
 
-    private static GradleConnector newConnector(String rootProjectPath, File projectDirectory) throws IOException
+    private static GradleConnector createConnector(Project project, File projectDirectory)
     {
         var connector = GradleConnector.newConnector().forProjectDirectory(projectDirectory);
-        var gradleWrapper = new File(projectDirectory, "gradle/wrapper/gradle-wrapper.properties");
-        if (!gradleWrapper.exists())
+        var manager = (GradleManager)ExternalSystemApiUtil.getManager(GradleConstants.SYSTEM_ID);
+        if (manager != null)
         {
-            gradleWrapper = new File(rootProjectPath, "gradle/wrapper/gradle-wrapper.properties");
-        }
-        if (gradleWrapper.exists())
-        {
-            var props = new Properties();
-            try (var in = new FileInputStream(gradleWrapper))
-            {
-                props.load(in);
-            }
-            var distributionUrl = props.getProperty("distributionUrl");
-            connector.useDistribution(URI.create(distributionUrl));
-        }
-        else
-        {
-            var gradleHome = System.getenv("GRADLE_HOME");
-            if (StringUtils.isNotBlank(gradleHome))
+            var executionSettingsProvider = manager.getExecutionSettingsProvider()
+                                                   .fun(new Pair<>(project, project.getBasePath()));
+            var gradleHome = executionSettingsProvider.getGradleHome();
+            if (gradleHome != null)
             {
                 connector.useInstallation(new File(gradleHome));
             }

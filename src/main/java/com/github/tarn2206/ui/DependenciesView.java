@@ -18,9 +18,8 @@ import com.github.tarn2206.tooling.GradleHelper;
 import com.github.tarn2206.tooling.MavenUtils;
 import com.github.tarn2206.tooling.ProjectInfo;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.roots.ProjectRootManager;
-import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.ui.components.JBScrollPane;
@@ -34,8 +33,8 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 
 public class DependenciesView extends SimpleToolWindowPanel
 {
-    private final String projectPath;
-    private final String sdkHome;
+    private static final Logger LOG = Logger.getInstance(DependenciesView.class);
+    private final transient Project project;
     private Tree tree;
     private DefaultMutableTreeNode rootNode;
     private final AtomicInteger worker = new AtomicInteger();
@@ -49,9 +48,7 @@ public class DependenciesView extends SimpleToolWindowPanel
 
         setupToolWindow(toolWindow);
 
-        projectPath = project.getBasePath();
-        var sdk = ProjectRootManager.getInstance(project).getProjectSdk();
-        sdkHome = sdk == null ? null : sdk.getHomePath();
+        this.project = project;
         run();
     }
 
@@ -90,27 +87,27 @@ public class DependenciesView extends SimpleToolWindowPanel
         tree.updateUI();
         if (disposables != null) disposables.dispose();
         disposables = new CompositeDisposable();
-        var disposable = fromCallable(() -> GradleHelper.getProjectInfo(projectPath, sdkHome))
-                .subscribe(p ->
+        var disposable = fromCallable(() -> GradleHelper.getProjectInfo(project))
+                .subscribe(info ->
                 {
-                    addProject(rootNode, p, AppSettings.getInstance());
+                    addProject(rootNode, info, AppSettings.getInstance());
                     tree.updateUI();
                     worker.decrementAndGet();
                 }, tr -> onError(rootNode, tr));
         disposables.add(disposable);
     }
 
-    private void addProject(DefaultMutableTreeNode node, ProjectInfo p, AppSettings settings)
+    private void addProject(DefaultMutableTreeNode node, ProjectInfo info, AppSettings settings)
     {
-        var dependency = new Dependency(p.name);
+        var dependency = new Dependency(info.name);
         node.setUserObject(dependency);
 
-        if (p.buildFile.exists())
+        if (info.buildFile.exists())
         {
             worker.incrementAndGet();
             dependency.status = "loading...";
             var disposable = fromCallable(() ->
-                GradleHelper.getDependencies(projectPath, sdkHome, p.buildFile.getParentFile()))
+                GradleHelper.getDependencies(project, info.buildFile.getParentFile()))
                             .subscribe(dependencies ->
                             {
                                 dependency.status = null;
@@ -123,7 +120,7 @@ public class DependenciesView extends SimpleToolWindowPanel
             disposables.add(disposable);
         }
 
-        for (var sub : p.children)
+        for (var sub : info.children)
         {
             var child = new DefaultMutableTreeNode();
             node.add(child);
@@ -196,7 +193,6 @@ public class DependenciesView extends SimpleToolWindowPanel
     private void onError(DefaultMutableTreeNode node, Throwable tr)
     {
         worker.decrementAndGet();
-        tr.printStackTrace();
         var rootCause = ExceptionUtils.getRootCause(tr);
         if (rootCause == null) rootCause = tr;
 
@@ -209,8 +205,10 @@ public class DependenciesView extends SimpleToolWindowPanel
         {
             var child = new DefaultMutableTreeNode(rootCause);
             node.insert(child, 0);
-            tree.expandPath(new TreePath(node.getPath()));
         }
+        tree.expandPath(new TreePath(node.getPath()));
+
+        LOG.error(tr);
     }
 
     private static <T> Single<? extends T> fromCallable(Callable<? extends T> callable)
