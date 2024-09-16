@@ -1,7 +1,7 @@
 package com.github.tarn2206.actions;
 
 import com.github.tarn2206.ui.SettingsDialog;
-import com.intellij.icons.AllIcons;
+import com.intellij.icons.AllIcons.Actions;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import org.jetbrains.annotations.NotNull;
@@ -10,7 +10,7 @@ public class SettingsAction extends AnAction
 {
     public SettingsAction()
     {
-        super("Settings", null, AllIcons.Actions.Properties);
+        super("Settings", null, Actions.Properties);
     }
 
     @Override

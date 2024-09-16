@@ -7,6 +7,12 @@ version '1.6.4'
 sourceCompatibility = 11
 targetCompatibility = 11
 
+configurations {
+  compileOnly {
+    extendsFrom annotationProcessor
+  }
+}
+
 repositories {
     mavenCentral()
 }
@@ -15,7 +21,8 @@ dependencies {
     implementation gradleApi()
     implementation 'io.reactivex.rxjava3:rxjava:3.1.8'
     implementation 'com.github.akarnokd:rxjava3-swing:3.1.1'
-
+    compileOnly 'org.projectlombok:lombok:1.18.34'
+    annotationProcessor 'org.projectlombok:lombok:1.18.34'
     testImplementation 'junit:junit:4.13.2'
 }
 

@@ -2,14 +2,18 @@ package com.github.tarn2206.tooling;
 
 import java.util.Objects;
 
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter @Setter
 public class Dependency
 {
-    public final String group;
-    public final String name;
-    public final String version;
-    public String latestVersion;
-    public String status;
-    public String error;
+    private final String group;
+    private final String name;
+    private final String version;
+    private String latestVersion;
+    private String status;
+    private String error;
 
     public Dependency(String name)
     {

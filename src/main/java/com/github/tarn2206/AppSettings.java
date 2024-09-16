@@ -7,24 +7,29 @@ import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
 import com.intellij.util.xmlb.XmlSerializerUtil;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 @State(name = "DependenciesCheckerSettings", storages = @Storage("dependencies-checker.xml"))
+@Getter @Setter
 public class AppSettings implements PersistentStateComponent<AppSettings>
 {
-    public List<Repo> repos;
-    public boolean ignoreUnstable = true;
-    public String unstablePatterns;
+    private List<Repo> repos;
+    private boolean ignoreUnstable = true;
+    private String unstablePatterns;
 
     public static AppSettings getInstance()
     {
         var settings = ApplicationManager.getApplication().getService(AppSettings.class);
         if (settings.repos == null || settings.repos.isEmpty())
         {
-            settings.repos = List.of(new AppSettings.Repo(true, "Maven Central", "https://repo.maven.apache.org/maven2"),
-                                     new AppSettings.Repo(true, "Google’s Android", "https://dl.google.com/dl/android/maven2"));
+            settings.repos = List.of(new Repo(true, "Maven Central", "https://repo.maven.apache.org/maven2"),
+                                     new Repo(true, "Google’s Android", "https://dl.google.com/dl/android/maven2"));
         }
         if (settings.ignoreUnstable && StringUtils.isBlank(settings.unstablePatterns))
         {
@@ -33,9 +38,8 @@ public class AppSettings implements PersistentStateComponent<AppSettings>
         return settings;
     }
 
-    @Nullable
     @Override
-    public AppSettings getState()
+    public @Nullable AppSettings getState()
     {
         return this;
     }
@@ -46,19 +50,13 @@ public class AppSettings implements PersistentStateComponent<AppSettings>
         XmlSerializerUtil.copyBean(state, this);
     }
 
+    @Getter @Setter
+    @AllArgsConstructor
+    @NoArgsConstructor
     public static class Repo
     {
-        public boolean active;
-        public String name;
-        public String url;
-
-        public Repo() {}
-
-        public Repo(boolean active, String name, String url)
-        {
-            this.active = active;
-            this.name = name;
-            this.url = url;
-        }
+        private boolean active;
+        private String name;
+        private String url;
     }
 }

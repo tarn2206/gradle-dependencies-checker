@@ -99,28 +99,28 @@ public class DependenciesView extends SimpleToolWindowPanel
 
     private void addProject(DefaultMutableTreeNode node, ProjectInfo info, AppSettings settings)
     {
-        var dependency = new Dependency(info.name);
+        var dependency = new Dependency(info.name());
         node.setUserObject(dependency);
 
-        if (info.buildFile.exists())
+        if (info.buildFile().exists())
         {
             worker.incrementAndGet();
-            dependency.status = "loading...";
+            dependency.setStatus("loading...");
             var disposable = fromCallable(() ->
-                GradleHelper.getDependencies(project, info.buildFile.getParentFile()))
+                GradleHelper.getDependencies(project, info.buildFile().getParentFile()))
                             .subscribe(dependencies ->
                             {
-                                dependency.status = null;
+                                dependency.setStatus(null);
                                 addDependencies(node, dependencies, settings);
                             }, tr ->
                             {
-                                dependency.status = null;
+                                dependency.setStatus(null);
                                 onError(node, tr);
                             });
             disposables.add(disposable);
         }
 
-        for (var sub : info.children)
+        for (var sub : info.children())
         {
             var child = new DefaultMutableTreeNode();
             node.add(child);
@@ -141,7 +141,7 @@ public class DependenciesView extends SimpleToolWindowPanel
             var child = new DefaultMutableTreeNode(dependency);
             node.insert(child, n++);
 
-            if (dependency.hasGroup() && dependency.version != null)
+            if (dependency.hasGroup() && dependency.getVersion() != null)
             {
                 checkForUpdate(dependency, child, settings);
             }
@@ -152,17 +152,17 @@ public class DependenciesView extends SimpleToolWindowPanel
 
     private void checkForUpdate(Dependency dependency, DefaultMutableTreeNode node, AppSettings settings)
     {
-        dependency.status = "check for updates...";
+        dependency.setStatus("check for updates...");
         updateList.add(dependency);
         if (updateSet.stream().anyMatch(e -> e.sameModule(dependency)))
         {
             updateList.stream()
-                      .filter(e -> e.sameModule(dependency) && !e.equals(dependency) && e.status == null)
+                      .filter(e -> e.sameModule(dependency) && !e.equals(dependency) && e.getStatus() == null)
                       .findAny()
                       .ifPresent(e ->
                       {
-                          dependency.latestVersion = e.latestVersion;
-                          dependency.status = null;
+                          dependency.setLatestVersion(e.getLatestVersion());
+                          dependency.setStatus(null);
                       });
             return;
         }
@@ -172,19 +172,19 @@ public class DependenciesView extends SimpleToolWindowPanel
         var disposable = fromCallable(() -> MavenUtils.checkForUpdate(dependency, settings))
                 .subscribe(result ->
                 {
-                    dependency.status = null;
+                    dependency.setStatus(null);
                     updateList.stream()
                               .filter(e -> e.sameModule(dependency) && !e.equals(dependency))
                               .forEach(e ->
                               {
-                                  e.latestVersion = dependency.latestVersion;
-                                  e.status = null;
+                                  e.setLatestVersion(dependency.getLatestVersion());
+                                  e.setStatus(null);
                               });
                     tree.updateUI();
                     worker.decrementAndGet();
                 }, tr ->
                 {
-                    dependency.status = null;
+                    dependency.setStatus(null);
                     onError(node, tr);
                 });
         disposables.add(disposable);

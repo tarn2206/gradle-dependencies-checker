@@ -6,19 +6,8 @@ import java.util.List;
 /**
  * @author tarn on 09 March 2022 16:49
  */
-public class ProjectInfo
+public record ProjectInfo(String name, File buildFile, List<ProjectInfo> children)
 {
-    public final String name;
-    public final File buildFile;
-    public final List<ProjectInfo> children;
-
-    ProjectInfo(String name, File buildFile, List<ProjectInfo> children)
-    {
-        this.name = name;
-        this.buildFile = buildFile;
-        this.children = children;
-    }
-
     @Override
     public String toString()
     {

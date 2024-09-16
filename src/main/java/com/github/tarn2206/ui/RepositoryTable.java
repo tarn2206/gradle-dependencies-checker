@@ -17,9 +17,9 @@ import com.intellij.util.ui.JBUI;
 
 public class RepositoryTable extends JPanel
 {
-    private final JBTable table;
-    private final DefaultTableModel model;
     private final List<AppSettings.Repo> repos = new ArrayList<>();
+    private final DefaultTableModel model;
+    private final JBTable table;
 
     public RepositoryTable()
     {
@@ -41,9 +41,9 @@ public class RepositoryTable extends JPanel
             public Object getValueAt(int row, int column)
             {
                 var repo = repos.get(row);
-                if (column == 0) return repo.active;
-                if (column == 1) return repo.name;
-                if (column == 2) return repo.url;
+                if (column == 0) return repo.isActive();
+                if (column == 1) return repo.getName();
+                if (column == 2) return repo.getUrl();
                 return null;
             }
 
@@ -51,9 +51,9 @@ public class RepositoryTable extends JPanel
             public void setValueAt(Object value, int row, int column)
             {
                 var repo = repos.get(row);
-                if (column == 0) repo.active = (boolean)value;
-                else if (column == 1) repo.name = (String)value;
-                else if (column == 2) repo.url = (String)value;
+                if (column == 0) repo.setActive((boolean)value);
+                else if (column == 1) repo.setName((String)value);
+                else if (column == 2) repo.setUrl((String)value);
             }
         };
         table = new JBTable(model);
@@ -84,15 +84,15 @@ public class RepositoryTable extends JPanel
         return new ArrayList<>(repos);
     }
 
-    public void setRepos(List<AppSettings.Repo> repos)
+    public void setRepos(List<AppSettings.Repo> list)
     {
-        this.repos.clear();
-        this.repos.addAll(repos);
+        repos.clear();
+        repos.addAll(list);
     }
 
     private void addEntry()
     {
-        final var cellEditor = table.getCellEditor();
+        var cellEditor = table.getCellEditor();
         if (cellEditor != null) cellEditor.stopCellEditing();
 
         var row = repos.size();

@@ -13,16 +13,14 @@ public class CheckForUpdates extends AnAction
     public void actionPerformed(@NotNull AnActionEvent e)
     {
         var project = e.getProject();
-        if (project == null)
+        if (project != null)
         {
-            return;
-        }
-
-        var toolWindowManager = ToolWindowManager.getInstance(project);
-        var toolWindow = toolWindowManager.getToolWindow(TOOL_WINDOW_ID);
-        if (toolWindow != null)
-        {
-            toolWindow.show(null);
+            var toolWindowManager = ToolWindowManager.getInstance(project);
+            var toolWindow = toolWindowManager.getToolWindow(TOOL_WINDOW_ID);
+            if (toolWindow != null)
+            {
+                toolWindow.show(null);
+            }
         }
     }
 }

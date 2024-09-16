@@ -139,7 +139,7 @@ public class GradleHelper
 
         var name = a[1].substring(0, i);
         var d = new Dependency(a[0], name, null);
-        d.error = a[1].substring(i + 1);
-        return "(n)".equals(d.error) ? null : d;
+        d.setError(a[1].substring(i + 1));
+        return "(n)".equals(d.getError()) ? null : d;
     }
 }

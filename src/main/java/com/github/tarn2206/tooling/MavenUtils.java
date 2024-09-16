@@ -13,33 +13,30 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.X509TrustManager;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.github.tarn2206.AppSettings;
 import com.intellij.openapi.diagnostic.Logger;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 public class MavenUtils
 {
     private static final Logger LOG = Logger.getInstance(MavenUtils.class);
 
-    private MavenUtils()
-    {}
+    private MavenUtils() {}
 
     public static Dependency checkForUpdate(Dependency dependency, AppSettings settings)
     {
-        var activeList = settings.repos.stream().filter(repo -> repo.active).collect(Collectors.toList());
+        var activeList = settings.getRepos().stream().filter(AppSettings.Repo::isActive).toList();
         for (var repo : activeList)
         {
             try
             {
-                var url = combine(repo.url, dependency.group.replace('.', '/') + "/" + dependency.name + "/maven-metadata.xml");
+                var url = combine(repo.getUrl(), dependency.getGroup().replace('.', '/') + "/" + dependency.getName() + "/maven-metadata.xml");
                 var connection = (HttpURLConnection)openConnection(url);
                 if (connection.getResponseCode() == 200)
                 {
@@ -47,17 +44,17 @@ public class MavenUtils
                     if (latestVersion != null)
                     {
                         setLatestVersion(dependency, latestVersion);
-                        dependency.error = null;
+                        dependency.setError(null);
                     }
                     break;
                 }
 
-                dependency.error = connection.getResponseMessage();
+                dependency.setError(connection.getResponseMessage());
                 LOG.warn(connection.getResponseCode() + " " + url);
             }
             catch (Exception e)
             {
-                dependency.error = e.getMessage();
+                dependency.setError(e.getMessage());
                 LOG.error(e);
             }
         }
@@ -72,43 +69,41 @@ public class MavenUtils
     private static URLConnection openConnection(String url) throws GeneralSecurityException, IOException
     {
         var connection = new URL(url).openConnection();
-        if (connection instanceof HttpsURLConnection)
+        if (connection instanceof HttpsURLConnection httpsConnection)
         {
-            X509TrustManager trustAll = new X509TrustManager()
-            {
-                @Override
-                public void checkClientTrusted(X509Certificate[] chain, String authType)
-                {/*ignored*/}
-
-                @Override
-                public void checkServerTrusted(X509Certificate[] chain, String authType)
-                {/*ignored*/}
-
-                @Override
-                public X509Certificate[] getAcceptedIssuers()
-                {
-                    return new X509Certificate[0];
-                }
-            };
-            var sslContext = SSLContext.getInstance("SSL");
-            sslContext.init(null, new X509TrustManager[] { trustAll }, new SecureRandom());
-            var httpsConnection = (HttpsURLConnection)connection;
-            httpsConnection.setSSLSocketFactory(sslContext.getSocketFactory());
-            httpsConnection.setHostnameVerifier((hostname, session) -> true);
+            trustAll(httpsConnection);
         }
-        setAuthentication(connection, url);
+        var userInfo = URI.create(url).getUserInfo();
+        if (StringUtils.isNotBlank(userInfo))
+        {
+            var authorization = "Basic " + Base64.getEncoder().encodeToString(userInfo.getBytes(UTF_8));
+            connection.setRequestProperty("Authorization", authorization);
+        }
         return connection;
     }
 
-    private static void setAuthentication(URLConnection connection, String url)
+    private static void trustAll(HttpsURLConnection connection) throws GeneralSecurityException
     {
-        var uri = URI.create(url);
-        var credentials = uri.getUserInfo();
-        if (StringUtils.isNotBlank(credentials))
+        var trustAll = new X509TrustManager()
         {
-            var authorization = "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes(UTF_8));
-            connection.setRequestProperty("Authorization", authorization);
-        }
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType)
+            {/*ignored*/}
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType)
+            {/*ignored*/}
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers()
+            {
+                return new X509Certificate[0];
+            }
+        };
+        var sslContext = SSLContext.getInstance("SSL");
+        sslContext.init(null, new X509TrustManager[] { trustAll }, new SecureRandom());
+        connection.setSSLSocketFactory(sslContext.getSocketFactory());
+        connection.setHostnameVerifier((hostname, session) -> true);
     }
 
     public static String getLatestVersion(InputStream in, AppSettings settings) throws IOException
@@ -119,7 +114,7 @@ public class MavenUtils
         {
             latest = find("<release>(.*)</release>", text);
         }
-        if (StringUtils.isNotBlank(latest) && (!settings.ignoreUnstable || isStable(latest, settings.unstablePatterns)))
+        if (!settings.isIgnoreUnstable() || isStable(latest, settings.getUnstablePatterns()))
         {
             return latest;
         }
@@ -129,7 +124,7 @@ public class MavenUtils
         while (matcher.find())
         {
             var version = matcher.group(1);
-            if (!settings.ignoreUnstable || isStable(version, settings.unstablePatterns))
+            if (!settings.isIgnoreUnstable() || isStable(version, settings.getUnstablePatterns()))
             {
                 latest = version;
             }
@@ -145,20 +140,24 @@ public class MavenUtils
 
     private static boolean isStable(String version, String patterns)
     {
+        if (StringUtils.isBlank(version)) return false;
         if (StringUtils.isBlank(patterns)) return true;
 
         var array = patterns.split(",");
         for (var pattern : array)
         {
             pattern = StringUtils.trimToEmpty(pattern);
-            if (!pattern.isEmpty() && StringUtils.containsIgnoreCase(version, pattern)) return false;
+            if (!pattern.isEmpty() && StringUtils.containsIgnoreCase(version, pattern))
+            {
+                return false;
+            }
         }
         return true;
     }
 
     private static void setLatestVersion(Dependency dependency, String latestVersion)
     {
-        var current = parseVersion(dependency.version);
+        var current = parseVersion(dependency.getVersion());
         while (current.size() < 3) current.add(0);
         var latest = parseVersion(latestVersion);
         var min = Math.min(current.size(), latest.size());
@@ -168,7 +167,7 @@ public class MavenUtils
             {
                 if (latest.get(i) > current.get(i))
                 {
-                    dependency.latestVersion = latestVersion;
+                    dependency.setLatestVersion(latestVersion);
                 }
                 break;
             }

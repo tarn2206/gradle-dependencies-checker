@@ -6,7 +6,8 @@ import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 import com.github.tarn2206.tooling.Dependency;
-import com.intellij.icons.AllIcons;
+import com.intellij.icons.AllIcons.Ide;
+import com.intellij.icons.AllIcons.Nodes;
 import com.intellij.ui.ColoredTreeCellRenderer;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.SimpleTextAttributes;
@@ -30,18 +31,18 @@ public class MyTreeCellRenderer extends ColoredTreeCellRenderer
     {
         var node = (DefaultMutableTreeNode)value;
         var obj = node.getUserObject();
-        if (obj instanceof String)
+        if (obj instanceof String str)
         {
             setIcon(getNodeIcon(node));
-            append((String)obj);
+            append(str);
         }
-        else if (obj instanceof Dependency)
+        else if (obj instanceof Dependency dependency)
         {
-            renderDependency(node, (Dependency)obj);
+            renderDependency(node, dependency);
         }
         else if (obj instanceof Throwable)
         {
-            setIcon(AllIcons.Ide.FatalError);
+            setIcon(Ide.FatalError);
             append(obj.toString(), ERROR_ATTRIBUTES);
         }
         else if (obj != null)
@@ -52,19 +53,19 @@ public class MyTreeCellRenderer extends ColoredTreeCellRenderer
 
     private Icon getNodeIcon(DefaultMutableTreeNode node)
     {
-        return node.getLevel() == 0 ? AllIcons.Nodes.PpJdk : AllIcons.Nodes.Module;
+        return node.getLevel() == 0 ? Nodes.PpJdk : Nodes.Module;
     }
 
     private void renderDependency(DefaultMutableTreeNode node, Dependency dependency)
     {
-        setIcon(dependency.hasGroup() ? AllIcons.Nodes.PpLib : getNodeIcon(node));
-        if (dependency.latestVersion != null)
+        setIcon(dependency.hasGroup() ? Nodes.PpLib : getNodeIcon(node));
+        if (dependency.getLatestVersion() != null)
         {
             append(dependency.toString(), ORANGE_ATTRIBUTES);
             append(" -> ");
-            append(dependency.latestVersion, CYAN_ATTRIBUTES);
+            append(dependency.getLatestVersion(), CYAN_ATTRIBUTES);
         }
-        else if (dependency.error != null)
+        else if (dependency.getError() != null)
         {
             append(dependency.toString(), WAVE_ATTRIBUTES);
         }
@@ -73,14 +74,14 @@ public class MyTreeCellRenderer extends ColoredTreeCellRenderer
             append(dependency.toString());
         }
 
-        if (dependency.status != null)
+        if (dependency.getStatus() != null)
         {
-            append(", " + dependency.status, GRAY_ATTRIBUTES);
+            append(", " + dependency.getStatus(), GRAY_ATTRIBUTES);
         }
-        else if (dependency.error != null)
+        else if (dependency.getError() != null)
         {
             append(" - ");
-            append(dependency.error, ERROR_ATTRIBUTES);
+            append(dependency.getError(), ERROR_ATTRIBUTES);
         }
     }
 }

@@ -1,7 +1,7 @@
 package com.github.tarn2206.actions;
 
 import com.github.tarn2206.ui.DependenciesView;
-import com.intellij.icons.AllIcons;
+import com.intellij.icons.AllIcons.Actions;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import org.jetbrains.annotations.NotNull;
@@ -12,7 +12,7 @@ public class RefreshAction extends AnAction
 
     public RefreshAction(DependenciesView view)
     {
-        super("Check for Updates...", null, AllIcons.Actions.Refresh);
+        super("Check for Updates...", null, Actions.Refresh);
         this.view = view;
     }
 
