@@ -68,7 +68,7 @@ public class MavenUtils
 
     private static URLConnection openConnection(String url) throws GeneralSecurityException, IOException
     {
-        var connection = new URL(url).openConnection();
+        var connection = URI.create(url).toURL().openConnection();
         if (connection instanceof HttpsURLConnection httpsConnection)
         {
             trustAll(httpsConnection);

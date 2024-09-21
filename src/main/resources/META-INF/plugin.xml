@@ -7,8 +7,6 @@
         Check gradle projects dependencies for version upgrades.
     ]]></description>
 
-    <idea-version since-build="203"/>
-
     <depends>com.intellij.modules.java</depends>
     <depends>com.intellij.gradle</depends>
 

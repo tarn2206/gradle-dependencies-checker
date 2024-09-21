@@ -1,11 +1,16 @@
 plugins {
-    id 'org.jetbrains.intellij' version '1.13.3'
+  id 'java'
+  id 'org.jetbrains.intellij.platform' version '2.0.1'
 }
 
 group 'com.github.tarn2206'
-version '1.6.4'
-sourceCompatibility = 11
-targetCompatibility = 11
+version '2.0.0'
+
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(17)
+  }
+}
 
 configurations {
   compileOnly {
@@ -14,38 +19,67 @@ configurations {
 }
 
 repositories {
-    mavenCentral()
+  mavenCentral()
+
+  intellijPlatform {
+    defaultRepositories()
+  }
 }
 
 dependencies {
-    implementation gradleApi()
-    implementation 'io.reactivex.rxjava3:rxjava:3.1.8'
-    implementation 'com.github.akarnokd:rxjava3-swing:3.1.1'
-    compileOnly 'org.projectlombok:lombok:1.18.34'
-    annotationProcessor 'org.projectlombok:lombok:1.18.34'
-    testImplementation 'junit:junit:4.13.2'
+  intellijPlatform {
+    intellijIdeaCommunity '2023.1'
+    bundledPlugins("com.intellij.java", "com.intellij.gradle", "org.jetbrains.android")
+    instrumentationTools()
+    pluginVerifier()
+  }
+  implementation gradleApi()
+  implementation 'io.reactivex.rxjava3:rxjava:3.1.9'
+  implementation 'com.github.akarnokd:rxjava3-swing:3.1.1'
+  compileOnly 'org.projectlombok:lombok:1.18.34'
+  annotationProcessor 'org.projectlombok:lombok:1.18.34'
+  testImplementation 'junit:junit:4.13.2'
 }
 
-intellij {
-    plugins = ["java", "android", "gradle", "Kotlin"]
-    version = 'IC-2020.3'
-    updateSinceUntilBuild = false
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.models.ProductRelease
+
+def sinceBuildNumber = '231'
+def untilBuildNumber = '242.*'
+
+// https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html#intellijPlatform-pluginVerification-ides
+intellijPlatform {
+  pluginVerification {
+    ides {
+      recommended()
+      select {
+        it.types = [IntelliJPlatformType.IntellijIdeaCommunity]
+        it.channels = [ProductRelease.Channel.RELEASE]
+        it.sinceBuild = "${sinceBuildNumber}"
+        it.untilBuild = "${untilBuildNumber}"
+      }
+    }
+  }
 }
-// See https://plugins.jetbrains.com/docs/intellij/build-number-ranges.html#intellij-platform-based-products-of-recent-ide-versions
 
 buildSearchableOptions.enabled = false
 
+// https://plugins.jetbrains.com/docs/intellij/build-number-ranges.html#intellij-platform-based-products-of-recent-ide-versions
 patchPluginXml {
-    sinceBuild = '203'
-    untilBuild = '232.*'
-    changeNotes = """
+  sinceBuild = "${sinceBuildNumber}"
+  untilBuild = "${untilBuildNumber}"
+  changeNotes = """
+<h2>2.0.0</h2>
+<ul>
+    <li>Upgrade to IntelliJ Platform Gradle Plugin (2.x)</li>
+</ul>
 <h2>1.6.4</h2>
 <ul>
     <li>Remove deprecated and internal api usage</li>
 </ul>
 <h2>1.6.3</h2>
 <ul>
-    <li>Support access private maven repository by using credentials in the URL<br>https://username:password@www.example.com/</li>
+    <li>Support authenticate private maven repository by include credentials in the URL<br>https://username:password@your-repo.com/</li>
     <li>Improve Android project support</li>
 </ul>
 <h2>1.6.2</h2>
