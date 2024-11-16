@@ -1,10 +1,10 @@
 plugins {
   id 'java'
-  id 'org.jetbrains.intellij.platform' version '2.0.1'
+  id 'org.jetbrains.intellij.platform' version '2.1.0'
 }
 
 group 'com.github.tarn2206'
-version '2.0.0'
+version '2.0.1'
 
 java {
   toolchain {
@@ -28,7 +28,7 @@ repositories {
 
 dependencies {
   intellijPlatform {
-    intellijIdeaCommunity '2023.1'
+    intellijIdeaCommunity '2022.3'
     bundledPlugins("com.intellij.java", "com.intellij.gradle", "org.jetbrains.android")
     instrumentationTools()
     pluginVerifier()
@@ -36,18 +36,16 @@ dependencies {
   implementation gradleApi()
   implementation 'io.reactivex.rxjava3:rxjava:3.1.9'
   implementation 'com.github.akarnokd:rxjava3-swing:3.1.1'
-  compileOnly 'org.projectlombok:lombok:1.18.34'
-  annotationProcessor 'org.projectlombok:lombok:1.18.34'
+  compileOnly 'org.projectlombok:lombok:1.18.36'
+  annotationProcessor 'org.projectlombok:lombok:1.18.36'
   testImplementation 'junit:junit:4.13.2'
 }
 
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
 
-def sinceBuildNumber = '231'
-def untilBuildNumber = '242.*'
-
 // https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html#intellijPlatform-pluginVerification-ides
+// https://plugins.jetbrains.com/docs/intellij/build-number-ranges.html#platformVersions
 intellijPlatform {
   pluginVerification {
     ides {
@@ -55,8 +53,8 @@ intellijPlatform {
       select {
         it.types = [IntelliJPlatformType.IntellijIdeaCommunity]
         it.channels = [ProductRelease.Channel.RELEASE]
-        it.sinceBuild = "${sinceBuildNumber}"
-        it.untilBuild = "${untilBuildNumber}"
+        it.sinceBuild = '223'
+        it.untilBuild = '243.*'
       }
     }
   }
@@ -64,11 +62,14 @@ intellijPlatform {
 
 buildSearchableOptions.enabled = false
 
-// https://plugins.jetbrains.com/docs/intellij/build-number-ranges.html#intellij-platform-based-products-of-recent-ide-versions
 patchPluginXml {
-  sinceBuild = "${sinceBuildNumber}"
-  untilBuild = "${untilBuildNumber}"
+  sinceBuild = "223"
+  untilBuild = provider { null }
   changeNotes = """
+<h2>2.0.1</h2>
+<ul>
+    <li>Fix plugin not available for new version of IntelliJ</li>
+</ul>
 <h2>2.0.0</h2>
 <ul>
     <li>Upgrade to IntelliJ Platform Gradle Plugin (2.x)</li>
