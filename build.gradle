@@ -1,10 +1,10 @@
 plugins {
   id 'java'
-  id 'org.jetbrains.intellij.platform' version '2.1.0'
+  id 'org.jetbrains.intellij.platform' version '2.5.0'
 }
 
 group 'com.github.tarn2206'
-version '2.0.1'
+version '2.0.2'
 
 java {
   toolchain {
@@ -28,16 +28,14 @@ repositories {
 
 dependencies {
   intellijPlatform {
-    intellijIdeaCommunity '2022.3'
+    intellijIdeaCommunity '2023.1'
     bundledPlugins("com.intellij.java", "com.intellij.gradle", "org.jetbrains.android")
     instrumentationTools()
     pluginVerifier()
   }
   implementation gradleApi()
-  implementation 'io.reactivex.rxjava3:rxjava:3.1.9'
-  implementation 'com.github.akarnokd:rxjava3-swing:3.1.1'
-  compileOnly 'org.projectlombok:lombok:1.18.36'
-  annotationProcessor 'org.projectlombok:lombok:1.18.36'
+  compileOnly 'org.projectlombok:lombok:1.18.38'
+  annotationProcessor 'org.projectlombok:lombok:1.18.38'
   testImplementation 'junit:junit:4.13.2'
 }
 
@@ -53,8 +51,8 @@ intellijPlatform {
       select {
         it.types = [IntelliJPlatformType.IntellijIdeaCommunity]
         it.channels = [ProductRelease.Channel.RELEASE]
-        it.sinceBuild = '223'
-        it.untilBuild = '243.*'
+        it.sinceBuild = '231'
+        it.untilBuild = '251.*'
       }
     }
   }
@@ -63,9 +61,13 @@ intellijPlatform {
 buildSearchableOptions.enabled = false
 
 patchPluginXml {
-  sinceBuild = "223"
+  sinceBuild = "231"
   untilBuild = provider { null }
   changeNotes = """
+<h2>2.0.2</h2>
+<ul>
+    <li>Improve running background tasks</li>
+</ul>
 <h2>2.0.1</h2>
 <ul>
     <li>Fix plugin not available for new version of IntelliJ</li>

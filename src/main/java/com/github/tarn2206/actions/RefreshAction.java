@@ -20,7 +20,7 @@ public class RefreshAction extends AnAction
     @Override
     public void actionPerformed(@NotNull AnActionEvent e)
     {
-        view.run();
+        view.update();
     }
 
     @Override
