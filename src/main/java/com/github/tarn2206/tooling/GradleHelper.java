@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
-import java.util.stream.Collectors;
 
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.project.Project;
@@ -40,11 +39,11 @@ public class GradleHelper
 
     private static ProjectInfo getProjectInfo(GradleProject gradleProject)
     {
-        var children = gradleProject.getChildren().stream().map(GradleHelper::getProjectInfo).collect(Collectors.toList());
+        var children = gradleProject.getChildren().stream().map(GradleHelper::getProjectInfo).toList();
         return new ProjectInfo(gradleProject.getName(), gradleProject.getBuildScript().getSourceFile(), children);
     }
 
-    public static List<Dependency> getDependencies(Project project, File projectDirectory) throws IOException
+    public static List<Dependency> getDependencies(Project project, File projectDirectory)
     {
         var connector = createConnector(project, projectDirectory);
         try (var connection = connector.connect(); var out = new ByteArrayOutputStream())
@@ -57,6 +56,10 @@ public class GradleHelper
             }
             buildLauncher.forTasks("dependencies").setStandardOutput(out).run();
             return parseDependencies(out.toString());
+        }
+        catch (IOException e)
+        {
+            throw new IllegalArgumentException(e);
         }
     }
 

@@ -19,7 +19,6 @@ import com.github.tarn2206.tooling.ProjectInfo;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
-import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
@@ -78,27 +77,37 @@ public class DependenciesView extends SimpleToolWindowPanel
         rootNode.setUserObject("loading...");
         tree.updateUI();
 
-        ProgressManager.getInstance().run(new Task.Backgroundable(project, "Load project " + project.getName(), true)
+        new Task.Backgroundable(project, "Load project " + project.getName(), true)
         {
+            private ProjectInfo info;
+
             @Override
             public void run(@NotNull ProgressIndicator indicator)
             {
-                try
-                {
-                    var info = GradleHelper.getProjectInfo(project);
-                    if (info != null)
-                    {
-                        addProject(rootNode, info, AppSettings.getInstance());
-                        tree.updateUI();
-                        worker.decrementAndGet();
-                    }
-                }
-                catch (Exception e)
-                {
-                    catchError(rootNode, e);
-                }
+                info = GradleHelper.getProjectInfo(project);
             }
-        });
+
+            @Override
+            public void onSuccess()
+            {
+                if (info != null)
+                {
+                    addProject(rootNode, info, AppSettings.getInstance());
+                }
+                else
+                {
+                    rootNode.setUserObject("Cannot load project info");
+                }
+                tree.updateUI();
+                worker.decrementAndGet();
+            }
+
+            @Override
+            public void onThrowable(@NotNull Throwable error)
+            {
+                catchError(rootNode, error);
+            }
+        }.queue();
     }
 
     private void addProject(DefaultMutableTreeNode node, ProjectInfo info, AppSettings settings)
@@ -110,24 +119,30 @@ public class DependenciesView extends SimpleToolWindowPanel
         {
             worker.incrementAndGet();
             dependency.setStatus("loading...");
-            ProgressManager.getInstance().run(new Task.Backgroundable(project, "Retrieve " + info.name() + " dependencies", true)
+            new Task.Backgroundable(project, "Retrieve " + info.name() + " dependencies", true)
             {
+                private List<Dependency> dependencies;
+
                 @Override
                 public void run(@NotNull ProgressIndicator indicator)
                 {
-                    try
-                    {
-                        var dependencies = GradleHelper.getDependencies(project, info.buildFile().getParentFile());
-                        dependency.setStatus(null);
-                        addDependencies(node, dependencies, settings);
-                    }
-                    catch (Exception e)
-                    {
-                        dependency.setStatus(null);
-                        catchError(node, e);
-                    }
+                    dependencies = GradleHelper.getDependencies(project, info.buildFile().getParentFile());
                 }
-            });
+
+                @Override
+                public void onSuccess()
+                {
+                    dependency.setStatus(null);
+                    addDependencies(node, dependencies, settings);
+                }
+
+                @Override
+                public void onThrowable(@NotNull Throwable error)
+                {
+                    dependency.setStatus(null);
+                    catchError(node, error);
+                }
+            }.queue();
         }
 
         for (var sub : info.children())
@@ -158,11 +173,13 @@ public class DependenciesView extends SimpleToolWindowPanel
         }
         worker.decrementAndGet();
         tree.expandPath(new TreePath(node.getPath()));
+        tree.updateUI();
     }
 
     private void checkForUpdate(Dependency dependency, DefaultMutableTreeNode node, AppSettings settings)
     {
         dependency.setStatus("check for updates...");
+        tree.updateUI();
         updateList.add(dependency);
         if (updateSet.stream().anyMatch(e -> e.sameModule(dependency)))
         {
@@ -173,38 +190,43 @@ public class DependenciesView extends SimpleToolWindowPanel
                       {
                           dependency.setLatestVersion(e.getLatestVersion());
                           dependency.setStatus(null);
+                          tree.updateUI();
                       });
             return;
         }
 
         updateSet.add(dependency);
         worker.incrementAndGet();
-        ProgressManager.getInstance().run(new Task.Backgroundable(project, "Check for update", true)
+        new Task.Backgroundable(project, "Check dependency updates", true)
         {
             @Override
             public void run(@NotNull ProgressIndicator indicator)
             {
-                try
-                {
-                    MavenUtils.checkForUpdate(dependency, settings);
-                    dependency.setStatus(null);
-                    updateList.stream()
-                              .filter(e -> e.sameModule(dependency) && !e.equals(dependency))
-                              .forEach(e ->
-                                       {
-                                           e.setLatestVersion(dependency.getLatestVersion());
-                                           e.setStatus(null);
-                                       });
-                    tree.updateUI();
-                    worker.decrementAndGet();
-                }
-                catch (Exception e)
-                {
-                    dependency.setStatus(null);
-                    catchError(node, e);
-                }
+                MavenUtils.checkForUpdate(dependency, settings);
             }
-        });
+
+            @Override
+            public void onSuccess()
+            {
+                dependency.setStatus(null);
+                updateList.stream()
+                          .filter(e -> e.sameModule(dependency) && !e.equals(dependency))
+                          .forEach(e ->
+                                   {
+                                       e.setLatestVersion(dependency.getLatestVersion());
+                                       e.setStatus(null);
+                                   });
+                tree.updateUI();
+                worker.decrementAndGet();
+            }
+
+            @Override
+            public void onThrowable(@NotNull Throwable error)
+            {
+                dependency.setStatus(null);
+                catchError(node, error);
+            }
+        }.queue();
     }
 
     private void catchError(DefaultMutableTreeNode node, Throwable tr)
@@ -216,7 +238,6 @@ public class DependenciesView extends SimpleToolWindowPanel
         if (node.equals(rootNode))
         {
             rootNode.setUserObject(rootCause);
-            tree.updateUI();
         }
         else
         {
@@ -224,6 +245,7 @@ public class DependenciesView extends SimpleToolWindowPanel
             node.insert(child, 0);
         }
         tree.expandPath(new TreePath(node.getPath()));
+        tree.updateUI();
 
         LOG.error(tr);
     }

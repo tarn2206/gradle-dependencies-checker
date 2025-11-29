@@ -1,10 +1,10 @@
 plugins {
   id 'java'
-  id 'org.jetbrains.intellij.platform' version '2.5.0'
+  id 'org.jetbrains.intellij.platform' version '2.10.5'
 }
 
 group 'com.github.tarn2206'
-version '2.0.2'
+version '2.1.0'
 
 java {
   toolchain {
@@ -52,7 +52,7 @@ intellijPlatform {
         it.types = [IntelliJPlatformType.IntellijIdeaCommunity]
         it.channels = [ProductRelease.Channel.RELEASE]
         it.sinceBuild = '231'
-        it.untilBuild = '251.*'
+        it.untilBuild = '253.*'
       }
     }
   }
@@ -64,6 +64,10 @@ patchPluginXml {
   sinceBuild = "231"
   untilBuild = provider { null }
   changeNotes = """
+<h2>2.1.0</h2>
+<ul>
+    <li>Fix TreeUI should be accessed only from EDT</li>
+</ul>
 <h2>2.0.2</h2>
 <ul>
     <li>Improve running background tasks</li>

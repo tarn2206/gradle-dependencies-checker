@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URL;
 import java.net.URLConnection;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
@@ -29,7 +28,7 @@ public class MavenUtils
 
     private MavenUtils() {}
 
-    public static Dependency checkForUpdate(Dependency dependency, AppSettings settings)
+    public static void checkForUpdate(Dependency dependency, AppSettings settings)
     {
         var activeList = settings.getRepos().stream().filter(AppSettings.Repo::isActive).toList();
         for (var repo : activeList)
@@ -54,11 +53,9 @@ public class MavenUtils
             }
             catch (Exception e)
             {
-                dependency.setError(e.getMessage());
-                LOG.error(e);
+                LOG.error(e.getMessage());
             }
         }
-        return dependency;
     }
 
     private static String combine(String a, String b)
