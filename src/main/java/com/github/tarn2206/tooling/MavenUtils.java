@@ -97,7 +97,7 @@ public class MavenUtils
                 return new X509Certificate[0];
             }
         };
-        var sslContext = SSLContext.getInstance("SSL");
+        var sslContext = SSLContext.getInstance("TLSv1.2");
         sslContext.init(null, new X509TrustManager[] { trustAll }, new SecureRandom());
         connection.setSSLSocketFactory(sslContext.getSocketFactory());
         connection.setHostnameVerifier((hostname, session) -> true);

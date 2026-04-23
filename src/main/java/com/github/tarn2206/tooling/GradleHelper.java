@@ -89,16 +89,7 @@ public class GradleHelper
             while (scanner.hasNext())
             {
                 var line = scanner.nextLine();
-                if (StringUtils.containsIgnoreCase(line, "compileClasspath - ")
-                        || StringUtils.containsIgnoreCase(line, "runtimeClasspath - ")
-                        || StringUtils.containsIgnoreCase(line, "implementation - "))
-                {
-                    inBlock = true;
-                }
-                else if (line.isEmpty())
-                {
-                    inBlock = false;
-                }
+                inBlock = checkIsInBlock(line, inBlock);
 
                 if (inBlock && (line.startsWith("+--- ") || line.startsWith("\\--- "))) // only first level
                 {
@@ -111,6 +102,16 @@ public class GradleHelper
             }
         }
         return list;
+    }
+
+    private static boolean checkIsInBlock(String line, boolean inBlock)
+    {
+        if (StringUtils.containsAnyIgnoreCase(line,
+                "compileClasspath - ",
+                "runtimeClasspath - ",
+                "implementation - ")) return true;
+        if (line.isEmpty()) return false;
+        return inBlock;
     }
 
     private static Dependency parseDependency(String s)
