@@ -21,6 +21,7 @@ import com.github.tarn2206.tooling.Vulnerability;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.actionSystem.Separator;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
@@ -51,6 +52,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -313,12 +315,13 @@ public class DependenciesView extends SimpleToolWindowPanel {
 
     private int findCoordOffset(VirtualFile file, String coord) {
         try {
-            var doc = FileDocumentManager.getInstance().getDocument(file);
-            if (doc != null) return doc.getText().indexOf(coord);
+            return ReadAction.compute(() -> {
+                var doc = FileDocumentManager.getInstance().getDocument(file);
+                return doc == null ? -1 : doc.getText().indexOf(coord);
+            });
         } catch (Exception ignored) {
-            // Fall through to -1
+            return -1;
         }
-        return -1;
     }
 
     public @Nullable VersionCatalog getCatalog() {
@@ -431,7 +434,7 @@ public class DependenciesView extends SimpleToolWindowPanel {
             addProject(child, sub, settings);
         }
 
-        if (node == rootNode && catalog != null && !catalog.getPlugins().isEmpty()) {
+        if (Objects.equals(node, rootNode) && catalog != null && !catalog.getPlugins().isEmpty()) {
             addPlugins(node, catalog, settings);
         }
 
@@ -706,7 +709,7 @@ public class DependenciesView extends SimpleToolWindowPanel {
         var rootCause = ExceptionUtils.getRootCause(tr);
         if (rootCause == null) rootCause = tr;
 
-        if (node == rootNode && rootNode.getUserObject() instanceof String) {
+        if (Objects.equals(node, rootNode) && rootNode.getUserObject() instanceof String) {
             rootNode.setUserObject(rootCause);
             treeModel.nodeChanged(rootNode);
         } else {

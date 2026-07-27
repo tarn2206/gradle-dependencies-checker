@@ -266,7 +266,7 @@ public final class OsvClient {
             var aff = affEl.getAsJsonObject();
             var pkg = aff.has("package") ? aff.getAsJsonObject("package") : null;
             if (pkg == null || !pkg.has("name")) continue;
-            if (!target.equals(pkg.get("name").getAsString().toLowerCase())) continue;
+            if (!target.equalsIgnoreCase(pkg.get("name").getAsString().toLowerCase())) continue;
             if (!aff.has("ranges")) continue;
             for (var rangeEl : aff.getAsJsonArray("ranges")) {
                 var range = rangeEl.getAsJsonObject();
