@@ -404,7 +404,7 @@ public class DependenciesView extends SimpleToolWindowPanel {
                         GRADLE_PERMIT.acquire();
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        throw new RuntimeException(e);
+                        throw new IllegalStateException(e);
                     }
                     try {
                         indicator.setText("Reading " + info.name() + " dependencies");

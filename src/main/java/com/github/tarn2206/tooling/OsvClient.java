@@ -27,6 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -107,6 +108,15 @@ public final class OsvClient {
     // ---------- Batch query + detail fetch ----------
 
     private static void processBatch(List<Dependency> chunk) throws IOException, InterruptedException {
+        var results = queryBatch(chunk);
+        if (results == null) return;
+
+        var idsPerDep = mapDepsToVulnIds(chunk, results);
+        var rawById = fetchAllVulnDetails(collectUniqueIds(idsPerDep));
+        assembleAndCache(chunk, idsPerDep, rawById);
+    }
+
+    private static JsonObject buildBatchRequestBody(List<Dependency> chunk) {
         var queries = new JsonArray();
         for (var dep : chunk) {
             var pkg = new JsonObject();
@@ -119,45 +129,56 @@ public final class OsvClient {
         }
         var body = new JsonObject();
         body.add("queries", queries);
+        return body;
+    }
 
+    private static @Nullable JsonArray queryBatch(List<Dependency> chunk) throws IOException, InterruptedException {
         var req = HttpRequest.newBuilder(URI.create(BATCH_URL))
                 .header("Content-Type", "application/json")
                 .timeout(REQ_TIMEOUT)
-                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(buildBatchRequestBody(chunk))))
                 .build();
 
         var resp = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200) {
             LOG.warn("OSV batch query returned HTTP " + resp.statusCode());
-            return;
+            return null;
         }
 
         var respJson = JsonParser.parseString(resp.body()).getAsJsonObject();
         var results = respJson.getAsJsonArray("results");
         if (results == null || results.size() != chunk.size()) {
             LOG.warn("OSV batch response malformed (results size mismatch)");
-            return;
+            return null;
         }
+        return results;
+    }
 
-        // Map each dep -> list of vuln IDs; collect unique IDs to fetch details for.
+    private static Map<Dependency, List<String>> mapDepsToVulnIds(List<Dependency> chunk, JsonArray results) {
         var idsPerDep = new HashMap<Dependency, List<String>>();
-        var uniqueIds = new HashSet<String>();
         for (var i = 0; i < results.size(); i++) {
             var dep = chunk.get(i);
             var ids = new ArrayList<String>();
             var result = results.get(i).getAsJsonObject();
             if (result.has("vulns")) {
                 for (var vulnEl : result.getAsJsonArray("vulns")) {
-                    var id = vulnEl.getAsJsonObject().get("id").getAsString();
-                    ids.add(id);
-                    uniqueIds.add(id);
+                    ids.add(vulnEl.getAsJsonObject().get("id").getAsString());
                 }
             }
             idsPerDep.put(dep, ids);
         }
+        return idsPerDep;
+    }
 
-        // Fetch details in parallel across a bounded pool. A single GHSA may affect many deps but
-        // we still only need one detail fetch per unique ID.
+    private static Set<String> collectUniqueIds(Map<Dependency, List<String>> idsPerDep) {
+        var uniqueIds = new HashSet<String>();
+        for (var ids : idsPerDep.values()) {
+            uniqueIds.addAll(ids);
+        }
+        return uniqueIds;
+    }
+
+    private static Map<String, JsonObject> fetchAllVulnDetails(Set<String> uniqueIds) {
         var rawById = new ConcurrentHashMap<String, JsonObject>();
         var futures = new ArrayList<CompletableFuture<Void>>();
         for (var id : uniqueIds) {
@@ -175,8 +196,12 @@ public final class OsvClient {
         } catch (Exception e) {
             LOG.warn("OSV detail-fetch batch had failures", e);
         }
+        return rawById;
+    }
 
-        // Assemble Vulnerability objects per dep (extracts per-coordinate fixedVersion) and cache.
+    private static void assembleAndCache(List<Dependency> chunk,
+                                         Map<Dependency, List<String>> idsPerDep,
+                                         Map<String, JsonObject> rawById) {
         for (var dep : chunk) {
             var vulnIds = idsPerDep.getOrDefault(dep, List.of());
             var vulns = new ArrayList<Vulnerability>();
@@ -266,7 +291,7 @@ public final class OsvClient {
             var aff = affEl.getAsJsonObject();
             var pkg = aff.has("package") ? aff.getAsJsonObject("package") : null;
             if (pkg == null || !pkg.has("name")) continue;
-            if (!target.equalsIgnoreCase(pkg.get("name").getAsString().toLowerCase())) continue;
+            if (!target.equalsIgnoreCase(pkg.get("name").getAsString())) continue;
             if (!aff.has("ranges")) continue;
             for (var rangeEl : aff.getAsJsonArray("ranges")) {
                 var range = rangeEl.getAsJsonObject();
