@@ -50,16 +50,6 @@ public class AppSettings implements PersistentStateComponent<AppSettings> {
         XmlSerializerUtil.copyBean(state, this);
     }
 
-    @Getter
-    @Setter
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class Repo {
-        private boolean active;
-        private String name;
-        private String url;
-    }
-
     public enum SortOrder {
         BY_SEVERITY("By severity"),
         ALPHABETICAL("Alphabetical"),
@@ -74,5 +64,15 @@ public class AppSettings implements PersistentStateComponent<AppSettings> {
         public String getDisplayName() {
             return displayName;
         }
+    }
+
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class Repo {
+        private boolean active;
+        private String name;
+        private String url;
     }
 }

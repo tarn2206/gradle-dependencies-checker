@@ -39,7 +39,9 @@ public final class AutoRefreshHook implements Disposable {
         this.alarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
     }
 
-    /** Called by the tool window on first open. Idempotent: subsequent calls just update the refresh target. */
+    /**
+     * Called by the tool window on first open. Idempotent: subsequent calls just update the refresh target.
+     */
     public void install(Runnable refresh) {
         this.refresh = refresh;
         if (!installed.compareAndSet(false, true)) return;
@@ -51,6 +53,7 @@ public final class AutoRefreshHook implements Disposable {
             public void onImportFinished(@Nullable String projectPath) {
                 schedule("Gradle sync completed");
             }
+
             @Override
             public void onImportFailed(@Nullable String projectPath) {
                 // Gradle failed to configure — no point re-running dependencies.
@@ -85,5 +88,6 @@ public final class AutoRefreshHook implements Disposable {
     }
 
     @Override
-    public void dispose() {}
+    public void dispose() {
+    }
 }

@@ -7,6 +7,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
+import lombok.experimental.UtilityClass;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.literals.GrLiteral;
 
@@ -15,19 +16,18 @@ import java.util.regex.Pattern;
 /**
  * Shared utilities for Groovy DSL (build.gradle) integration.
  */
+@UtilityClass
 public final class GradleDslHelpers {
     private static final Pattern COORD_PART = Pattern.compile("[\\w.\\-+]+");
 
-    private GradleDslHelpers() {}
-
-    /** True for {@code build.gradle}, {@code settings.gradle}, and any other .gradle file. Excludes .kts. */
+    /**
+     * True for {@code build.gradle}, {@code settings.gradle}, and any other .gradle file. Excludes .kts.
+     */
     public static boolean isGradleFile(@Nullable PsiFile file) {
         if (file == null) return false;
         var name = file.getName();
         return name.endsWith(".gradle") && !name.endsWith(".gradle.kts");
     }
-
-    public record Coordinate(String group, String name, String version) {}
 
     /**
      * Parses a {@code group:name:version} string. Returns null for anything that doesn't look like a
@@ -80,5 +80,8 @@ public final class GradleDslHelpers {
             PsiDocumentManager.getInstance(project).commitDocument(doc);
         });
         return true;
+    }
+
+    public record Coordinate(String group, String name, String version) {
     }
 }

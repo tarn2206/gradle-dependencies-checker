@@ -126,43 +126,6 @@ public final class VersionCatalog {
         return new VersionCatalog(tomlFile, versions, byCoord, plugins, versionKeyToLibs, versionKeyToPlugs);
     }
 
-    public @Nullable CatalogEntry findByCoordinate(String group, String name) {
-        if (group == null || name == null) return null;
-        return byCoordinate.get(group + ":" + name);
-    }
-
-    public List<CatalogEntry> getPlugins() {
-        return plugins;
-    }
-
-    public List<String> librariesUsingVersionKey(String versionKey) {
-        return versionKeyToLibraries.getOrDefault(versionKey, List.of());
-    }
-
-    public List<String> pluginsUsingVersionKey(String versionKey) {
-        return versionKeyToPlugins.getOrDefault(versionKey, List.of());
-    }
-
-    public File tomlFile() {
-        return tomlFile;
-    }
-
-    public @Nullable String versionFor(String versionKey) {
-        return versions.get(versionKey);
-    }
-
-    /** Resolves an entry to a concrete version string, or null if the entry has no declared version. */
-    public @Nullable String resolveVersion(CatalogEntry entry) {
-        if (entry.inlineVersion() != null) return entry.inlineVersion();
-        if (entry.versionRef() != null) return versionFor(entry.versionRef());
-        return null;
-    }
-
-    // --- internals ---
-
-    private record ParsedLibrary(String group, String name, String versionRef, String inlineVersion, int versionLine) {}
-    private record ParsedPlugin(String pluginId, String versionRef, String inlineVersion, int versionLine) {}
-
     private static @Nullable ParsedLibrary parseLibraryEntry(String libKey, TomlTable libraries, File tomlFile) {
         var value = libraries.get(libKey);
         var libLine = lineOf(libraries, libKey);
@@ -229,9 +192,9 @@ public final class VersionCatalog {
         return new ParsedPlugin(id, versionInfo.versionRef, versionInfo.inlineVersion, versionInfo.line);
     }
 
-    private record VersionInfo(String versionRef, String inlineVersion, int line) {}
-
-    /** Extracts version.ref / version fields from a library or plugin table. Shared between both kinds. */
+    /**
+     * Extracts version.ref / version fields from a library or plugin table. Shared between both kinds.
+     */
     private static VersionInfo extractVersionFields(TomlTable table, int fallbackLine) {
         String versionRef = null;
         String inlineVersion = null;
@@ -288,5 +251,50 @@ public final class VersionCatalog {
             }
         }
         return null;
+    }
+
+    public @Nullable CatalogEntry findByCoordinate(String group, String name) {
+        if (group == null || name == null) return null;
+        return byCoordinate.get(group + ":" + name);
+    }
+
+    public List<CatalogEntry> getPlugins() {
+        return plugins;
+    }
+
+    // --- internals ---
+
+    public List<String> librariesUsingVersionKey(String versionKey) {
+        return versionKeyToLibraries.getOrDefault(versionKey, List.of());
+    }
+
+    public List<String> pluginsUsingVersionKey(String versionKey) {
+        return versionKeyToPlugins.getOrDefault(versionKey, List.of());
+    }
+
+    public File tomlFile() {
+        return tomlFile;
+    }
+
+    public @Nullable String versionFor(String versionKey) {
+        return versions.get(versionKey);
+    }
+
+    /**
+     * Resolves an entry to a concrete version string, or null if the entry has no declared version.
+     */
+    public @Nullable String resolveVersion(CatalogEntry entry) {
+        if (entry.inlineVersion() != null) return entry.inlineVersion();
+        if (entry.versionRef() != null) return versionFor(entry.versionRef());
+        return null;
+    }
+
+    private record ParsedLibrary(String group, String name, String versionRef, String inlineVersion, int versionLine) {
+    }
+
+    private record ParsedPlugin(String pluginId, String versionRef, String inlineVersion, int versionLine) {
+    }
+
+    private record VersionInfo(String versionRef, String inlineVersion, int line) {
     }
 }

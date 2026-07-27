@@ -3,6 +3,9 @@ package com.github.tarn2206.actions;
 import com.github.tarn2206.tooling.DependencyUpdater;
 import com.github.tarn2206.ui.DependenciesView;
 import com.intellij.icons.AllIcons.Actions;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationType;
+import com.intellij.notification.Notifications;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -10,9 +13,6 @@ import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.wm.ToolWindowManager;
-import com.intellij.notification.Notification;
-import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications;
 import org.jetbrains.annotations.NotNull;
 
 public class ApplyUpdateAction extends AnAction {
@@ -22,6 +22,22 @@ public class ApplyUpdateAction extends AnAction {
     public ApplyUpdateAction(DependenciesView view) {
         super("Apply Update", "Update to the latest version", Actions.Download);
         this.view = view;
+    }
+
+    private static void notify(Project project, String content, NotificationType type) {
+        var notification = new Notification(NOTIFICATION_GROUP, "Dependency Update", content, type);
+        Notifications.Bus.notify(notification, project);
+    }
+
+    /**
+     * Ensures the tool window is visible before we show the notification/refresh, so users see the result.
+     * Currently unused, kept for potential future integration when triggering from other places.
+     */
+    @SuppressWarnings("unused")
+    private static void showToolWindow(Project project) {
+        var mgr = ToolWindowManager.getInstance(project);
+        var tw = mgr.getToolWindow("Dependency Updates");
+        if (tw != null) tw.show(null);
     }
 
     @Override
@@ -69,21 +85,5 @@ public class ApplyUpdateAction extends AnAction {
                 // no-op
             }
         }
-    }
-
-    private static void notify(Project project, String content, NotificationType type) {
-        var notification = new Notification(NOTIFICATION_GROUP, "Dependency Update", content, type);
-        Notifications.Bus.notify(notification, project);
-    }
-
-    /**
-     * Ensures the tool window is visible before we show the notification/refresh, so users see the result.
-     * Currently unused, kept for potential future integration when triggering from other places.
-     */
-    @SuppressWarnings("unused")
-    private static void showToolWindow(Project project) {
-        var mgr = ToolWindowManager.getInstance(project);
-        var tw = mgr.getToolWindow("Dependency Updates");
-        if (tw != null) tw.show(null);
     }
 }

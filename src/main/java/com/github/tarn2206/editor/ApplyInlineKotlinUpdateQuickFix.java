@@ -22,6 +22,23 @@ public class ApplyInlineKotlinUpdateQuickFix implements LocalQuickFix {
         this.newVersion = newVersion;
     }
 
+    /**
+     * Clear latestVersion + vulnerabilities on the state's dep so editor decorations stop firing until refresh.
+     */
+    private static void invalidateStaleState(Project project, KtStringTemplateExpression tpl) {
+        var value = KotlinDslHelpers.plainStringValue(tpl);
+        if (value == null) return;
+        var coord = GradleDslHelpers.parseCoordinate(value);
+        if (coord == null) return;
+        var state = project.getService(DependencyStateService.class);
+        var dep = state.byCoordinate(coord.group(), coord.name());
+        if (dep != null) {
+            dep.setLatestVersion(null);
+            dep.setVulnerabilities(null);
+        }
+        state.notifyChange();
+    }
+
     @Override
     public @NotNull String getName() {
         return "Update to " + newVersion;
@@ -47,20 +64,5 @@ public class ApplyInlineKotlinUpdateQuickFix implements LocalQuickFix {
                             "Updated to " + newVersion, NotificationType.INFORMATION),
                     project);
         }
-    }
-
-    /** Clear latestVersion + vulnerabilities on the state's dep so editor decorations stop firing until refresh. */
-    private static void invalidateStaleState(Project project, KtStringTemplateExpression tpl) {
-        var value = KotlinDslHelpers.plainStringValue(tpl);
-        if (value == null) return;
-        var coord = GradleDslHelpers.parseCoordinate(value);
-        if (coord == null) return;
-        var state = project.getService(DependencyStateService.class);
-        var dep = state.byCoordinate(coord.group(), coord.name());
-        if (dep != null) {
-            dep.setLatestVersion(null);
-            dep.setVulnerabilities(null);
-        }
-        state.notifyChange();
     }
 }

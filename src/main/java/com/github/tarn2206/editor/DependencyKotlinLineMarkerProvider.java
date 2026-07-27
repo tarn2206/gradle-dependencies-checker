@@ -22,6 +22,34 @@ import java.util.List;
 
 public class DependencyKotlinLineMarkerProvider extends LineMarkerProviderDescriptor {
 
+    private static Vulnerability.Severity highestSeverity(List<Vulnerability> vulns) {
+        var top = Vulnerability.Severity.UNKNOWN;
+        for (var v : vulns) {
+            top = Vulnerability.Severity.max(top, v.severity());
+        }
+        return top;
+    }
+
+    private static String buildVulnTooltip(Dependency dep, List<Vulnerability> vulns, boolean hasUpdate) {
+        var top = highestSeverity(vulns);
+        var sb = new StringBuilder("<html>");
+        sb.append("<b>").append(vulns.size())
+                .append(vulns.size() == 1 ? " known vulnerability" : " known vulnerabilities")
+                .append("</b> (").append(top.name()).append(")<br>");
+        var maxShown = Math.min(vulns.size(), 5);
+        for (var i = 0; i < maxShown; i++) {
+            var v = vulns.get(i);
+            sb.append("• ").append(v.id()).append(" — ").append(v.severity().name());
+            if (v.fixedVersion() != null) sb.append(" (fixed in ").append(v.fixedVersion()).append(")");
+            sb.append("<br>");
+        }
+        if (vulns.size() > maxShown) sb.append("… and ").append(vulns.size() - maxShown).append(" more<br>");
+        sb.append("<br><i>Click to ");
+        sb.append(hasUpdate ? "update to " + dep.getLatestVersion() : "open OSV.dev");
+        sb.append("</i></html>");
+        return sb.toString();
+    }
+
     @Override
     public @Nullable String getName() {
         return "Gradle dependency updates & vulnerabilities";
@@ -102,33 +130,5 @@ public class DependencyKotlinLineMarkerProvider extends LineMarkerProviderDescri
             var coord = URLEncoder.encode(dep.getGroup() + ":" + dep.getName(), StandardCharsets.UTF_8);
             BrowserUtil.browse("https://osv.dev/list?q=" + coord + "&ecosystem=Maven");
         }
-    }
-
-    private static Vulnerability.Severity highestSeverity(List<Vulnerability> vulns) {
-        var top = Vulnerability.Severity.UNKNOWN;
-        for (var v : vulns) {
-            top = Vulnerability.Severity.max(top, v.severity());
-        }
-        return top;
-    }
-
-    private static String buildVulnTooltip(Dependency dep, List<Vulnerability> vulns, boolean hasUpdate) {
-        var top = highestSeverity(vulns);
-        var sb = new StringBuilder("<html>");
-        sb.append("<b>").append(vulns.size())
-          .append(vulns.size() == 1 ? " known vulnerability" : " known vulnerabilities")
-          .append("</b> (").append(top.name()).append(")<br>");
-        var maxShown = Math.min(vulns.size(), 5);
-        for (var i = 0; i < maxShown; i++) {
-            var v = vulns.get(i);
-            sb.append("• ").append(v.id()).append(" — ").append(v.severity().name());
-            if (v.fixedVersion() != null) sb.append(" (fixed in ").append(v.fixedVersion()).append(")");
-            sb.append("<br>");
-        }
-        if (vulns.size() > maxShown) sb.append("… and ").append(vulns.size() - maxShown).append(" more<br>");
-        sb.append("<br><i>Click to ");
-        sb.append(hasUpdate ? "update to " + dep.getLatestVersion() : "open OSV.dev");
-        sb.append("</i></html>");
-        return sb.toString();
     }
 }

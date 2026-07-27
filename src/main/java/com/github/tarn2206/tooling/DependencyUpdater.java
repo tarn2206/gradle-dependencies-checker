@@ -1,13 +1,13 @@
 package com.github.tarn2206.tooling;
 
 import com.intellij.openapi.command.WriteCommandAction;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
+import lombok.experimental.UtilityClass;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
@@ -15,19 +15,8 @@ import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
+@UtilityClass
 public final class DependencyUpdater {
-    private static final Logger LOG = Logger.getInstance(DependencyUpdater.class);
-
-    private DependencyUpdater() {}
-
-    public enum Status { UPDATED, NOT_FOUND, CANCELLED, FAILED }
-
-    public record Result(Status status, String message, @Nullable VirtualFile file, int line) {
-        public static Result updated(String msg) { return new Result(Status.UPDATED, msg, null, 0); }
-        public static Result notFound(String msg, VirtualFile file, int line) { return new Result(Status.NOT_FOUND, msg, file, line); }
-        public static Result cancelled() { return new Result(Status.CANCELLED, "Cancelled", null, 0); }
-        public static Result failed(String msg) { return new Result(Status.FAILED, msg, null, 0); }
-    }
 
     public static Result apply(Project project, Dependency dep, @Nullable VersionCatalog catalog) {
         var newVersion = dep.getLatestVersion();
@@ -144,7 +133,7 @@ public final class DependencyUpdater {
         return replaced.get()
                 ? Result.updated(successMessage)
                 : Result.notFound("Couldn't locate version '" + oldVersion + "' in " + file.getName(),
-                                  vFile, Math.max(lineNumber, 1));
+                vFile, Math.max(lineNumber, 1));
     }
 
     private static boolean tryReplaceOnLine(Document doc, int line1based, String oldVersion, String newVersion) {
@@ -171,5 +160,25 @@ public final class DependencyUpdater {
     private static int findClosestLine(Document doc, String needle) {
         var idx = doc.getText().indexOf(needle);
         return idx < 0 ? 1 : doc.getLineNumber(idx) + 1;
+    }
+
+    public enum Status {UPDATED, NOT_FOUND, CANCELLED, FAILED}
+
+    public record Result(Status status, String message, @Nullable VirtualFile file, int line) {
+        public static Result updated(String msg) {
+            return new Result(Status.UPDATED, msg, null, 0);
+        }
+
+        public static Result notFound(String msg, VirtualFile file, int line) {
+            return new Result(Status.NOT_FOUND, msg, file, line);
+        }
+
+        public static Result cancelled() {
+            return new Result(Status.CANCELLED, "Cancelled", null, 0);
+        }
+
+        public static Result failed(String msg) {
+            return new Result(Status.FAILED, msg, null, 0);
+        }
     }
 }

@@ -7,6 +7,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
+import lombok.experimental.UtilityClass;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry;
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression;
@@ -15,11 +16,12 @@ import org.jetbrains.kotlin.psi.KtStringTemplateExpression;
  * Kotlin PSI utilities for build.gradle.kts. Mirrors {@link GradleDslHelpers} for Groovy —
  * coordinate parsing is shared (see {@code GradleDslHelpers.parseCoordinate}).
  */
+@UtilityClass
 public final class KotlinDslHelpers {
 
-    private KotlinDslHelpers() {}
-
-    /** Only fire on Kotlin DSL Gradle scripts (build.gradle.kts, settings.gradle.kts). */
+    /**
+     * Only fire on Kotlin DSL Gradle scripts (build.gradle.kts, settings.gradle.kts).
+     */
     public static boolean isKotlinDslFile(@Nullable PsiFile file) {
         return file != null && file.getName().endsWith(".gradle.kts");
     }
@@ -49,7 +51,9 @@ public final class KotlinDslHelpers {
         return new TextRange(idx, idx + version.length());
     }
 
-    /** Replaces just the version substring inside the Kotlin string template. Single undo. */
+    /**
+     * Replaces just the version substring inside the Kotlin string template. Single undo.
+     */
     public static boolean replaceVersionInTemplate(Project project, KtStringTemplateExpression tpl,
                                                    String oldVersion, String newVersion) {
         var text = tpl.getText();

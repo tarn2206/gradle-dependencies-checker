@@ -37,8 +37,7 @@ public class OutdatedDependencyTomlInspection extends LocalInspectionTool {
                             handleDirect(keyValue, entryKey, state.byCatalogKey(entryKey), CatalogEntry.Kind.LIBRARY);
                     case CatalogPsiHelpers.PLUGINS ->
                             handleDirect(keyValue, entryKey, state.byPluginKey(entryKey), CatalogEntry.Kind.PLUGIN);
-                    case CatalogPsiHelpers.VERSIONS ->
-                            handleVersionKey(keyValue, entryKey, state);
+                    case CatalogPsiHelpers.VERSIONS -> handleVersionKey(keyValue, entryKey, state);
                     default -> { /* other tables not our concern */ }
                 }
             }

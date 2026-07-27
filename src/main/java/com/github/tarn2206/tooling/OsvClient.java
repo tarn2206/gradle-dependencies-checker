@@ -8,6 +8,7 @@ import com.google.gson.reflect.TypeToken;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.util.concurrency.AppExecutorUtil;
+import lombok.experimental.UtilityClass;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -36,6 +37,7 @@ import java.util.concurrent.ExecutorService;
  * Uses batch queries (up to 1000 coordinates per HTTP call) and caches results on disk
  * with a 6-hour TTL. Never throws — network failures are logged and treated as "no vulns known."
  */
+@UtilityClass
 public final class OsvClient {
     private static final Logger LOG = Logger.getInstance(OsvClient.class);
 
@@ -52,14 +54,14 @@ public final class OsvClient {
             .build();
     private static final Gson GSON = new Gson();
 
-    /** Bounded pool for parallel vulnerability-details fetches. 4 concurrent requests is well under any rate limits. */
+    /**
+     * Bounded pool for parallel vulnerability-details fetches. 4 concurrent requests is well under any rate limits.
+     */
     private static final ExecutorService DETAIL_POOL =
             AppExecutorUtil.createBoundedApplicationPoolExecutor("osv-detail", 4);
 
     private static final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
     private static volatile boolean cacheLoaded = false;
-
-    private OsvClient() {}
 
     /**
      * Populates {@link Dependency#getVulnerabilities()} for each dep in the list.
@@ -287,7 +289,8 @@ public final class OsvClient {
         if (!Files.isRegularFile(path)) return;
         try {
             var json = Files.readString(path);
-            Map<String, CacheEntry> loaded = GSON.fromJson(json, new TypeToken<Map<String, CacheEntry>>(){}.getType());
+            Map<String, CacheEntry> loaded = GSON.fromJson(json, new TypeToken<Map<String, CacheEntry>>() {
+            }.getType());
             if (loaded != null) {
                 loaded.forEach((k, v) -> {
                     if (v != null && !isExpired(v)) cache.put(k, v);
@@ -316,7 +319,9 @@ public final class OsvClient {
         return System.currentTimeMillis() - entry.timestamp > CACHE_TTL_MS;
     }
 
-    /** Package-private for testing. */
+    /**
+     * Package-private for testing.
+     */
     static void clearCache() {
         cache.clear();
         cacheLoaded = false;

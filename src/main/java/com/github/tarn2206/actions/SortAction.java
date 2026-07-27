@@ -42,7 +42,9 @@ public class SortAction extends AnAction {
         return ActionUpdateThread.BGT;
     }
 
-    /** One entry per {@link AppSettings.SortOrder}. Checkmark shows current selection. */
+    /**
+     * One entry per {@link AppSettings.SortOrder}. Checkmark shows current selection.
+     */
     private static class SetSortOrderAction extends ToggleAction {
         private final AppSettings.SortOrder order;
         private final DependenciesView view;

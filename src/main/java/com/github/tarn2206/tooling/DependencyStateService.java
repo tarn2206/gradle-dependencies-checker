@@ -32,13 +32,13 @@ public final class DependencyStateService {
         this.project = project;
     }
 
+    public @Nullable VersionCatalog getCatalog() {
+        return currentCatalog;
+    }
+
     public void setCatalog(@Nullable VersionCatalog catalog) {
         this.currentCatalog = catalog;
         notifyChange();
-    }
-
-    public @Nullable VersionCatalog getCatalog() {
-        return currentCatalog;
     }
 
     public void clear() {
@@ -48,7 +48,9 @@ public final class DependencyStateService {
         notifyChange();
     }
 
-    /** Bulk index a module's deps. Called after {@link Dependency} objects are populated. */
+    /**
+     * Bulk index a module's deps. Called after {@link Dependency} objects are populated.
+     */
     public void upsertAll(Iterable<Dependency> deps) {
         for (var dep : deps) {
             index(dep);

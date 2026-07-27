@@ -33,6 +33,10 @@ public class ApplyUpdateQuickFix implements LocalQuickFix {
         this.newVersion = newVersion;
     }
 
+    private static void notify(Project project, String content, NotificationType type) {
+        Notifications.Bus.notify(new Notification(NOTIFICATION_GROUP, "Dependency Update", content, type), project);
+    }
+
     @Override
     public @NotNull String getName() {
         return "Update to " + newVersion;
@@ -73,11 +77,8 @@ public class ApplyUpdateQuickFix implements LocalQuickFix {
                 notify(project, result.message(), NotificationType.WARNING);
             }
             case FAILED -> Messages.showErrorDialog(project, result.message(), "Apply Dependency Update");
-            case CANCELLED -> {}
+            case CANCELLED -> {
+            }
         }
-    }
-
-    private static void notify(Project project, String content, NotificationType type) {
-        Notifications.Bus.notify(new Notification(NOTIFICATION_GROUP, "Dependency Update", content, type), project);
     }
 }

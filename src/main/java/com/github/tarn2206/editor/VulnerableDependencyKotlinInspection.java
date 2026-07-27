@@ -16,6 +16,22 @@ import java.util.List;
 
 public class VulnerableDependencyKotlinInspection extends LocalInspectionTool {
 
+    private static Vulnerability.Severity highestSeverity(List<Vulnerability> vulns) {
+        var top = Vulnerability.Severity.UNKNOWN;
+        for (var v : vulns) {
+            top = Vulnerability.Severity.max(top, v.severity());
+        }
+        return top;
+    }
+
+    private static ProblemHighlightType highlightTypeFor(Vulnerability.Severity s) {
+        return switch (s) {
+            case CRITICAL, HIGH -> ProblemHighlightType.GENERIC_ERROR;
+            case MODERATE -> ProblemHighlightType.WARNING;
+            case LOW, UNKNOWN -> ProblemHighlightType.WEAK_WARNING;
+        };
+    }
+
     @Override
     public @NotNull PsiElementVisitor buildVisitor(@NotNull ProblemsHolder holder, boolean isOnTheFly) {
         if (!KotlinDslHelpers.isKotlinDslFile(holder.getFile())) {
@@ -65,22 +81,6 @@ public class VulnerableDependencyKotlinInspection extends LocalInspectionTool {
                         fixes.toArray(LocalQuickFix.EMPTY_ARRAY)
                 );
             }
-        };
-    }
-
-    private static Vulnerability.Severity highestSeverity(List<Vulnerability> vulns) {
-        var top = Vulnerability.Severity.UNKNOWN;
-        for (var v : vulns) {
-            top = Vulnerability.Severity.max(top, v.severity());
-        }
-        return top;
-    }
-
-    private static ProblemHighlightType highlightTypeFor(Vulnerability.Severity s) {
-        return switch (s) {
-            case CRITICAL, HIGH -> ProblemHighlightType.GENERIC_ERROR;
-            case MODERATE -> ProblemHighlightType.WARNING;
-            case LOW, UNKNOWN -> ProblemHighlightType.WEAK_WARNING;
         };
     }
 }

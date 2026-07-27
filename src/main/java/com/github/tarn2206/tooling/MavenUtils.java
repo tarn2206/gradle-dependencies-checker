@@ -2,6 +2,7 @@ package com.github.tarn2206.tooling;
 
 import com.github.tarn2206.AppSettings;
 import com.intellij.openapi.diagnostic.Logger;
+import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 import org.w3c.dom.Element;
@@ -33,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+@UtilityClass
 public class MavenUtils {
     private static final Logger LOG = Logger.getInstance(MavenUtils.class);
     private static final Comparator<String> VERSION_COMPARATOR = new VersionComparator();
@@ -42,21 +44,14 @@ public class MavenUtils {
     // ---------- Cache: raw latest-version-from-metadata per coord, 15-min TTL ----------
     // Prevents redundant HTTP when refreshes fire in bursts (auto-refresh, multi-module projects).
     private static final long CACHE_TTL_MS = 15L * 60 * 1000;
-
-    private record CacheEntry(String rawLatestVersion, long timestamp) {
-        boolean isFresh() {
-            return System.currentTimeMillis() - timestamp < CACHE_TTL_MS;
-        }
-    }
-
     private static final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
-    /** Called when user changes settings — repos or unstable-version rules could invalidate cached results. */
+    /**
+     * Called when user changes settings — repos or unstable-version rules could invalidate cached results.
+     */
     public static void clearCache() {
         cache.clear();
     }
-
-    private MavenUtils() {}
 
     public static void checkForUpdate(Dependency dependency, AppSettings settings) {
         var repos = settings.getRepos().stream().filter(AppSettings.Repo::isActive).toList();
@@ -96,7 +91,9 @@ public class MavenUtils {
         }
     }
 
-    /** Returns raw latest version from metadata at this URL, or empty on 404 / not found. */
+    /**
+     * Returns raw latest version from metadata at this URL, or empty on 404 / not found.
+     */
     private static Optional<String> tryFetchRaw(Dependency dependency, AppSettings settings, String url) {
         try {
             var connection = openConnection(url);
@@ -170,9 +167,18 @@ public class MavenUtils {
 
     private static void trustAll(HttpsURLConnection connection) throws GeneralSecurityException {
         var trustAll = new X509TrustManager() {
-            @Override public void checkClientTrusted(X509Certificate[] chain, String authType) {}
-            @Override public void checkServerTrusted(X509Certificate[] chain, String authType) {}
-            @Override public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+            }
         };
         var sslContext = SSLContext.getInstance("TLSv1.2");
         sslContext.init(null, new X509TrustManager[]{trustAll}, new SecureRandom());
@@ -253,7 +259,21 @@ public class MavenUtils {
         }
     }
 
+    private record CacheEntry(String rawLatestVersion, long timestamp) {
+        boolean isFresh() {
+            return System.currentTimeMillis() - timestamp < CACHE_TTL_MS;
+        }
+    }
+
     static class VersionComparator implements Comparator<String> {
+        private static Long tryParse(String s) {
+            try {
+                return Long.parseLong(s);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+
         @Override
         public int compare(String a, String b) {
             if (a == null && b == null) return 0;
@@ -284,14 +304,6 @@ public class MavenUtils {
                 if (cmp != 0) return cmp;
             }
             return 0;
-        }
-
-        private static Long tryParse(String s) {
-            try {
-                return Long.parseLong(s);
-            } catch (NumberFormatException e) {
-                return null;
-            }
         }
     }
 }

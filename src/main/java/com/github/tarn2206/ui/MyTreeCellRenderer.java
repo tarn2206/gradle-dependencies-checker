@@ -3,7 +3,6 @@ package com.github.tarn2206.ui;
 import com.github.tarn2206.tooling.CatalogEntry;
 import com.github.tarn2206.tooling.Dependency;
 import com.github.tarn2206.tooling.Vulnerability;
-import com.intellij.icons.AllIcons;
 import com.intellij.icons.AllIcons.Ide;
 import com.intellij.icons.AllIcons.Nodes;
 import com.intellij.ui.ColoredTreeCellRenderer;
@@ -31,6 +30,47 @@ public class MyTreeCellRenderer extends ColoredTreeCellRenderer {
     public static final SimpleTextAttributes CRITICAL_ATTRIBUTES = new SimpleTextAttributes(STYLE_BOLD, new JBColor(new Color(0xff0e14), new Color(0xe85259)));
 
     private static final int MAX_ERROR_LEN = 200;
+
+    private static String coordDisplay(Dependency dep) {
+        var entry = dep.getCatalogEntry();
+        if (entry != null && entry.kind() == CatalogEntry.Kind.PLUGIN && entry.pluginId() != null) {
+            return dep.getVersion() == null ? entry.pluginId() : entry.pluginId() + ":" + dep.getVersion();
+        }
+        return dep.toString();
+    }
+
+    /**
+     * Truncate & first-line-ify a Throwable for single-line tree rendering.
+     */
+    private static String shortenThrowable(Throwable tr) {
+        var msg = tr.getMessage();
+        if (msg == null || msg.isBlank()) return tr.getClass().getSimpleName();
+        return shortenError(msg);
+    }
+
+    private static String shortenError(String msg) {
+        var firstLine = msg.split("\\R", 2)[0].trim();
+        var cut = firstLine.indexOf(" Searched in");
+        if (cut > 0) firstLine = firstLine.substring(0, cut).trim();
+        return firstLine.length() > MAX_ERROR_LEN ? firstLine.substring(0, MAX_ERROR_LEN - 3) + "..." : firstLine;
+    }
+
+    private static Vulnerability.Severity highestSeverity(List<Vulnerability> vulns) {
+        if (vulns == null || vulns.isEmpty()) return Vulnerability.Severity.UNKNOWN;
+        var top = Vulnerability.Severity.UNKNOWN;
+        for (var v : vulns) {
+            top = Vulnerability.Severity.max(top, v.severity());
+        }
+        return top;
+    }
+
+    private static SimpleTextAttributes attributesFor(Vulnerability.Severity severity) {
+        return switch (severity) {
+            case CRITICAL -> CRITICAL_ATTRIBUTES;
+            case HIGH, MODERATE -> ORANGE_ATTRIBUTES;
+            case LOW, UNKNOWN -> GRAY_ATTRIBUTES;
+        };
+    }
 
     @Override
     public void customizeCellRenderer(@NotNull JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean hasFocus) {
@@ -97,44 +137,5 @@ public class MyTreeCellRenderer extends ColoredTreeCellRenderer {
             append(" - ");
             append(shortenError(dependency.getError()), ERROR_ATTRIBUTES);
         }
-    }
-
-    private static String coordDisplay(Dependency dep) {
-        var entry = dep.getCatalogEntry();
-        if (entry != null && entry.kind() == CatalogEntry.Kind.PLUGIN && entry.pluginId() != null) {
-            return dep.getVersion() == null ? entry.pluginId() : entry.pluginId() + ":" + dep.getVersion();
-        }
-        return dep.toString();
-    }
-
-    /** Truncate & first-line-ify a Throwable for single-line tree rendering. */
-    private static String shortenThrowable(Throwable tr) {
-        var msg = tr.getMessage();
-        if (msg == null || msg.isBlank()) return tr.getClass().getSimpleName();
-        return shortenError(msg);
-    }
-
-    private static String shortenError(String msg) {
-        var firstLine = msg.split("\\R", 2)[0].trim();
-        var cut = firstLine.indexOf(" Searched in");
-        if (cut > 0) firstLine = firstLine.substring(0, cut).trim();
-        return firstLine.length() > MAX_ERROR_LEN ? firstLine.substring(0, MAX_ERROR_LEN - 3) + "..." : firstLine;
-    }
-
-    private static Vulnerability.Severity highestSeverity(List<Vulnerability> vulns) {
-        if (vulns == null || vulns.isEmpty()) return Vulnerability.Severity.UNKNOWN;
-        var top = Vulnerability.Severity.UNKNOWN;
-        for (var v : vulns) {
-            top = Vulnerability.Severity.max(top, v.severity());
-        }
-        return top;
-    }
-
-    private static SimpleTextAttributes attributesFor(Vulnerability.Severity severity) {
-        return switch (severity) {
-            case CRITICAL -> CRITICAL_ATTRIBUTES;
-            case HIGH, MODERATE -> ORANGE_ATTRIBUTES;
-            case LOW, UNKNOWN -> GRAY_ATTRIBUTES;
-        };
     }
 }

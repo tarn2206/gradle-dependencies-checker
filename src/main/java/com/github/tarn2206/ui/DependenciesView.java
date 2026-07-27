@@ -51,7 +51,6 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -72,42 +71,137 @@ public class DependenciesView extends SimpleToolWindowPanel {
      */
     private static final Semaphore GRADLE_PERMIT = new Semaphore(1);
 
-    /** Bounded pool for HTTP update checks. 4 concurrent Maven metadata fetches at most. */
+    /**
+     * Bounded pool for HTTP update checks. 4 concurrent Maven metadata fetches at most.
+     */
     private static final ExecutorService UPDATE_CHECK_POOL =
             AppExecutorUtil.createBoundedApplicationPoolExecutor("dep-update-check", 4);
-
-    private final transient Project project;
-    private final transient DependencyStateService stateService;
-    private final AtomicInteger worker = new AtomicInteger();
-    /** Coordinates for which we've already submitted a check in this refresh cycle. */
-    private final Set<String> checkFired = ConcurrentHashMap.newKeySet();
-    /** True while a refresh is in flight; a completeWork() that brings the worker count to 0 will trigger sort. */
-    private final AtomicBoolean pendingFinalize = new AtomicBoolean(false);
-    /** Expansion state captured before the last refresh, keyed by stable node names. Null on first refresh. */
-    private @Nullable Set<List<String>> capturedExpanded = null;
-    /** All paths that existed before the last refresh. Lets us tell "was collapsed" apart from "is new". */
-    private @Nullable Set<List<String>> capturedExisted = null;
-    /** Nodes removed from the tree by the "Show only upgradable" filter; kept so we can put them back. */
-    private final List<HiddenNode> hiddenNodes = new ArrayList<>();
-
-    private record HiddenNode(DefaultMutableTreeNode parent, DefaultMutableTreeNode child) {}
-
     private static final Comparator<Dependency> ALPHABETICAL_COMPARATOR =
             Comparator.comparing((Dependency d) -> d.getGroup() != null ? d.getGroup() : "")
                     .thenComparing(d -> d.getName() != null ? d.getName() : "");
-
     private static final Comparator<Dependency> BY_SEVERITY_COMPARATOR =
             Comparator.comparingInt(DependenciesView::severityRank)
                     .thenComparing(ALPHABETICAL_COMPARATOR);
+    private final transient Project project;
+    private final transient DependencyStateService stateService;
+    private final AtomicInteger worker = new AtomicInteger();
+    /**
+     * Coordinates for which we've already submitted a check in this refresh cycle.
+     */
+    private final Set<String> checkFired = ConcurrentHashMap.newKeySet();
+    /**
+     * True while a refresh is in flight; a completeWork() that brings the worker count to 0 will trigger sort.
+     */
+    private final AtomicBoolean pendingFinalize = new AtomicBoolean(false);
+    /**
+     * Nodes removed from the tree by the "Show only upgradable" filter; kept so we can put them back.
+     */
+    private final List<HiddenNode> hiddenNodes = new ArrayList<>();
+    /**
+     * Expansion state captured before the last refresh, keyed by stable node names. Null on first refresh.
+     */
+    private @Nullable Set<List<String>> capturedExpanded = null;
+    /**
+     * All paths that existed before the last refresh. Lets us tell "was collapsed" apart from "is new".
+     */
+    private @Nullable Set<List<String>> capturedExisted = null;
     private Tree tree;
     private DefaultTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
     private VersionCatalog catalog;
-
     public DependenciesView(Project project) {
         super(true, true);
         this.project = project;
         this.stateService = project.getService(DependencyStateService.class);
+    }
+
+    private static String moduleKey(Dependency d) {
+        return d.getGroup() + ":" + d.getName();
+    }
+
+    private static void onEdt(Runnable r) {
+        ApplicationManager.getApplication().invokeLater(r);
+    }
+
+    private static int[] toIntArray(List<Integer> list) {
+        var arr = new int[list.size()];
+        for (var i = 0; i < arr.length; i++) arr[i] = list.get(i);
+        return arr;
+    }
+
+    private static String shortErrorText(Throwable tr) {
+        var msg = tr.getMessage();
+        if (msg == null || msg.isBlank()) return tr.getClass().getSimpleName();
+        var firstLine = msg.split("\\R", 2)[0].trim();
+        var cut = firstLine.indexOf(" Searched in");
+        if (cut > 0) firstLine = firstLine.substring(0, cut).trim();
+        if (firstLine.length() > 200) firstLine = firstLine.substring(0, 197) + "...";
+        return firstLine;
+    }
+
+    private static List<String> pathToNames(TreePath path) {
+        var names = new ArrayList<String>(path.getPathCount());
+        for (var obj : path.getPath()) {
+            names.add(nodeName((DefaultMutableTreeNode) obj));
+        }
+        return names;
+    }
+
+    private static List<String> pathToNames(DefaultMutableTreeNode node) {
+        var names = new ArrayList<String>();
+        for (var obj : node.getPath()) {
+            names.add(nodeName((DefaultMutableTreeNode) obj));
+        }
+        return names;
+    }
+
+    /**
+     * Stable per-node identifier that survives across refreshes (unlike the node reference itself).
+     */
+    private static String nodeName(DefaultMutableTreeNode node) {
+        var obj = node.getUserObject();
+        if (obj instanceof Dependency dep) {
+            return dep.hasGroup() ? dep.getGroup() + ":" + dep.getName() : dep.getName();
+        }
+        if (obj instanceof String s) return s;
+        return String.valueOf(obj);
+    }
+
+    /**
+     * Real library dependencies (with group) come first, sorted by comparator. Sub-project name
+     * nodes and the "Plugins" string node keep their declared positions (stable sort with 0).
+     */
+    private static int compareTreeNodes(DefaultMutableTreeNode a, DefaultMutableTreeNode b,
+                                        Comparator<Dependency> comparator) {
+        var oa = a.getUserObject();
+        var ob = b.getUserObject();
+        var libA = oa instanceof Dependency da && da.hasGroup() ? da : null;
+        var libB = ob instanceof Dependency db && db.hasGroup() ? db : null;
+        if (libA != null && libB != null) return comparator.compare(libA, libB);
+        if (libA != null) return -1;
+        if (libB != null) return 1;
+        return 0;
+    }
+
+    /**
+     * Lower rank sorts earlier. Critical/high vulns first, then updates, then errors, then clean.
+     */
+    private static int severityRank(Dependency dep) {
+        var vulns = dep.getVulnerabilities();
+        if (vulns != null && !vulns.isEmpty()) {
+            var top = Vulnerability.Severity.UNKNOWN;
+            for (var v : vulns) top = Vulnerability.Severity.max(top, v.severity());
+            return switch (top) {
+                case CRITICAL -> 0;
+                case HIGH -> 1;
+                case MODERATE -> 2;
+                case LOW -> 3;
+                case UNKNOWN -> 4;
+            };
+        }
+        if (dep.hasMeaningfulUpdate()) return 5;
+        if (dep.getError() != null) return 6;
+        return 7;
     }
 
     public void initToolWindow(ToolWindow toolWindow) {
@@ -499,7 +593,9 @@ public class DependenciesView extends SimpleToolWindowPanel {
         });
     }
 
-    /** Same as submitUpdateCheck but uses the plugin-aware repo list (adds Gradle Plugin Portal). */
+    /**
+     * Same as submitUpdateCheck but uses the plugin-aware repo list (adds Gradle Plugin Portal).
+     */
     private void submitPluginUpdateCheck(Dependency pluginDep, DefaultMutableTreeNode node, AppSettings settings) {
         var coord = moduleKey(pluginDep);
         if (!checkFired.add(coord)) {
@@ -568,7 +664,9 @@ public class DependenciesView extends SimpleToolWindowPanel {
         }
     }
 
-    /** Move any hidden dep that now has an update available back into the tree. */
+    /**
+     * Move any hidden dep that now has an update available back into the tree.
+     */
     private void unhideNewlyUpgradable() {
         if (hiddenNodes.isEmpty()) return;
         var byParent = new LinkedHashMap<DefaultMutableTreeNode, List<DefaultMutableTreeNode>>();
@@ -595,20 +693,6 @@ public class DependenciesView extends SimpleToolWindowPanel {
                 tree.expandPath(new TreePath(parent.getPath()));
             }
         }
-    }
-
-    private static String moduleKey(Dependency d) {
-        return d.getGroup() + ":" + d.getName();
-    }
-
-    private static void onEdt(Runnable r) {
-        ApplicationManager.getApplication().invokeLater(r);
-    }
-
-    private static int[] toIntArray(List<Integer> list) {
-        var arr = new int[list.size()];
-        for (var i = 0; i < arr.length; i++) arr[i] = list.get(i);
-        return arr;
     }
 
     private void catchError(DefaultMutableTreeNode node, Throwable tr) {
@@ -673,16 +757,6 @@ public class DependenciesView extends SimpleToolWindowPanel {
         return null;
     }
 
-    private static String shortErrorText(Throwable tr) {
-        var msg = tr.getMessage();
-        if (msg == null || msg.isBlank()) return tr.getClass().getSimpleName();
-        var firstLine = msg.split("\\R", 2)[0].trim();
-        var cut = firstLine.indexOf(" Searched in");
-        if (cut > 0) firstLine = firstLine.substring(0, cut).trim();
-        if (firstLine.length() > 200) firstLine = firstLine.substring(0, 197) + "...";
-        return firstLine;
-    }
-
     /**
      * Record which nodes exist and which are expanded, so we can restore expansion state
      * after {@link #update()} rebuilds the tree from scratch.
@@ -700,10 +774,12 @@ public class DependenciesView extends SimpleToolWindowPanel {
         capturedExisted = existed;
     }
 
-    /** Walks the whole tree recording each node's path and, if the node is expanded, adding it to the expanded set. */
+    /**
+     * Walks the whole tree recording each node's path and, if the node is expanded, adding it to the expanded set.
+     */
     private void collectPathsAndExpansion(DefaultMutableTreeNode node,
-                                           Set<List<String>> existed,
-                                           Set<List<String>> expanded) {
+                                          Set<List<String>> existed,
+                                          Set<List<String>> expanded) {
         var pathNames = pathToNames(node);
         existed.add(pathNames);
         if (tree.isExpanded(new TreePath(node.getPath()))) {
@@ -738,33 +814,8 @@ public class DependenciesView extends SimpleToolWindowPanel {
         }
     }
 
-    private static List<String> pathToNames(TreePath path) {
-        var names = new ArrayList<String>(path.getPathCount());
-        for (var obj : path.getPath()) {
-            names.add(nodeName((DefaultMutableTreeNode) obj));
-        }
-        return names;
-    }
-
-    private static List<String> pathToNames(DefaultMutableTreeNode node) {
-        var names = new ArrayList<String>();
-        for (var obj : node.getPath()) {
-            names.add(nodeName((DefaultMutableTreeNode) obj));
-        }
-        return names;
-    }
-
-    /** Stable per-node identifier that survives across refreshes (unlike the node reference itself). */
-    private static String nodeName(DefaultMutableTreeNode node) {
-        var obj = node.getUserObject();
-        if (obj instanceof Dependency dep) {
-            return dep.hasGroup() ? dep.getGroup() + ":" + dep.getName() : dep.getName();
-        }
-        if (obj instanceof String s) return s;
-        return String.valueOf(obj);
-    }
-
-    /** Called instead of {@link AtomicInteger#decrementAndGet()} for every unit of work that
+    /**
+     * Called instead of {@link AtomicInteger#decrementAndGet()} for every unit of work that
      * completes. If this brings the worker count to zero and a refresh is in flight, apply the
      * user's chosen sort. The pending-finalize flag ensures we sort exactly once per refresh.
      */
@@ -787,7 +838,9 @@ public class DependenciesView extends SimpleToolWindowPanel {
         }
     }
 
-    /** Expand every row in the tree. */
+    /**
+     * Expand every row in the tree.
+     */
     public void expandAll() {
         int row = 0;
         while (row < tree.getRowCount()) {
@@ -796,7 +849,9 @@ public class DependenciesView extends SimpleToolWindowPanel {
         }
     }
 
-    /** Collapse every row except the root. */
+    /**
+     * Collapse every row except the root.
+     */
     public void collapseAll() {
         for (var row = tree.getRowCount() - 1; row > 0; row--) {
             tree.collapseRow(row);
@@ -843,7 +898,9 @@ public class DependenciesView extends SimpleToolWindowPanel {
         }
     }
 
-    /** Put every stashed hidden node back into its original parent. Order is fixed by a subsequent sort. */
+    /**
+     * Put every stashed hidden node back into its original parent. Order is fixed by a subsequent sort.
+     */
     private void restoreHiddenInternal() {
         if (hiddenNodes.isEmpty()) return;
         var byParent = new LinkedHashMap<DefaultMutableTreeNode, List<DefaultMutableTreeNode>>();
@@ -939,38 +996,6 @@ public class DependenciesView extends SimpleToolWindowPanel {
         }
     }
 
-    /**
-     * Real library dependencies (with group) come first, sorted by comparator. Sub-project name
-     * nodes and the "Plugins" string node keep their declared positions (stable sort with 0).
-     */
-    private static int compareTreeNodes(DefaultMutableTreeNode a, DefaultMutableTreeNode b,
-                                        Comparator<Dependency> comparator) {
-        var oa = a.getUserObject();
-        var ob = b.getUserObject();
-        var libA = oa instanceof Dependency da && da.hasGroup() ? da : null;
-        var libB = ob instanceof Dependency db && db.hasGroup() ? db : null;
-        if (libA != null && libB != null) return comparator.compare(libA, libB);
-        if (libA != null) return -1;
-        if (libB != null) return 1;
-        return 0;
-    }
-
-    /** Lower rank sorts earlier. Critical/high vulns first, then updates, then errors, then clean. */
-    private static int severityRank(Dependency dep) {
-        var vulns = dep.getVulnerabilities();
-        if (vulns != null && !vulns.isEmpty()) {
-            var top = Vulnerability.Severity.UNKNOWN;
-            for (var v : vulns) top = Vulnerability.Severity.max(top, v.severity());
-            return switch (top) {
-                case CRITICAL -> 0;
-                case HIGH -> 1;
-                case MODERATE -> 2;
-                case LOW -> 3;
-                case UNKNOWN -> 4;
-            };
-        }
-        if (dep.hasMeaningfulUpdate()) return 5;
-        if (dep.getError() != null) return 6;
-        return 7;
+    private record HiddenNode(DefaultMutableTreeNode parent, DefaultMutableTreeNode child) {
     }
 }

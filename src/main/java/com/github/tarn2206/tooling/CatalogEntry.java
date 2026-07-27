@@ -23,9 +23,9 @@ public record CatalogEntry(
         File tomlFile,
         int versionLineNumber
 ) {
-    public enum Kind { LIBRARY, PLUGIN }
-
-    /** Gradle-style accessor as it appears in build.gradle. */
+    /**
+     * Gradle-style accessor as it appears in build.gradle.
+     */
     public String displayName() {
         var dotted = key.replace('-', '.');
         return kind == Kind.PLUGIN ? "libs.plugins." + dotted : "libs." + dotted;
@@ -34,4 +34,6 @@ public record CatalogEntry(
     public boolean hasEditableVersion() {
         return versionRef != null || inlineVersion != null;
     }
+
+    public enum Kind {LIBRARY, PLUGIN}
 }

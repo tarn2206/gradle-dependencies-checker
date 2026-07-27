@@ -17,9 +17,13 @@ public class Dependency {
     private String status;
     private String error;
     private CatalogEntry catalogEntry;
-    /** Build file of the module that declared this dependency. Used by ApplyUpdateAction. */
+    /**
+     * Build file of the module that declared this dependency. Used by ApplyUpdateAction.
+     */
     private File moduleBuildFile;
-    /** Known vulnerabilities. Null = not yet checked. Empty = clean. */
+    /**
+     * Known vulnerabilities. Null = not yet checked. Empty = clean.
+     */
     private List<Vulnerability> vulnerabilities;
 
     public Dependency(String name) {
