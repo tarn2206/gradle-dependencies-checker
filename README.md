@@ -8,7 +8,7 @@ An IntelliJ IDEA plugin that surfaces available version updates and known vulner
 for every dependency in your Gradle project — in a dedicated tool window and directly in
 your editor.
 
-![Tool window showing dependency updates](docs/screenshot.png)
+![Tool window showing dependency updates](docs/dependency_upgrades_tool_window.jpg)
 
 Features
 --------
