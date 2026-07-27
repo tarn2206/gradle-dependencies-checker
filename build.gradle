@@ -1,14 +1,17 @@
 plugins {
   id 'java'
-  id 'org.jetbrains.intellij.platform' version '2.10.5'
+  id 'org.jetbrains.intellij.platform' version '2.18.1'
 }
 
 group 'com.github.tarn2206'
-version '2.1.0'
+version '3.0.0'
 
 java {
   toolchain {
-    languageVersion = JavaLanguageVersion.of(17)
+    // JBR in IntelliJ 2025.3 is based on OpenJDK 21. Compiling to bytecode 21 keeps the
+    // plugin loadable on the minimum supported IDE version. Java 21 supports all language
+    // features currently used (records, pattern matching, switch expressions).
+    languageVersion = JavaLanguageVersion.of(21)
   }
 }
 
@@ -28,14 +31,16 @@ repositories {
 
 dependencies {
   intellijPlatform {
-    intellijIdeaCommunity '2023.1'
-    bundledPlugins("com.intellij.java", "com.intellij.gradle", "org.jetbrains.android")
-    instrumentationTools()
-    pluginVerifier()
+    // Compile against the minimum supported version so we can't accidentally reference
+    // APIs newer than 2025.3. Adjust patch number as needed if this version is unavailable.
+    intellijIdea '2025.3'
+    bundledPlugins("com.intellij.java", "com.intellij.gradle", "org.toml.lang", "org.intellij.groovy", "org.jetbrains.kotlin")
   }
   implementation gradleApi()
-  compileOnly 'org.projectlombok:lombok:1.18.38'
-  annotationProcessor 'org.projectlombok:lombok:1.18.38'
+  implementation 'org.tomlj:tomlj:1.1.1'
+  implementation 'com.google.code.gson:gson:2.14.0'
+  compileOnly 'org.projectlombok:lombok:1.18.46'
+  annotationProcessor 'org.projectlombok:lombok:1.18.46'
   testImplementation 'junit:junit:4.13.2'
 }
 
@@ -51,8 +56,8 @@ intellijPlatform {
       select {
         it.types = [IntelliJPlatformType.IntellijIdeaCommunity]
         it.channels = [ProductRelease.Channel.RELEASE]
-        it.sinceBuild = '231'
-        it.untilBuild = '253.*'
+        it.sinceBuild = '253'
+        it.untilBuild = '262.*'
       }
     }
   }
@@ -61,9 +66,122 @@ intellijPlatform {
 buildSearchableOptions.enabled = false
 
 patchPluginXml {
-  sinceBuild = "231"
+  sinceBuild = "253"
   untilBuild = provider { null }
   changeNotes = """
+<h2>3.0.0</h2>
+<p>Major release: version catalog support, one-click updates, CVE flagging, and editor integration.</p>
+
+<h3>Version catalog support</h3>
+<ul>
+    <li>Parses <code>gradle/libs.versions.toml</code>: <code>[versions]</code>, <code>[libraries]</code>, and <code>[plugins]</code> sections</li>
+    <li>Displays catalog accessor (e.g. <code>libs.guava</code>, <code>libs.plugins.springboot</code>) next to each dep in the tool window</li>
+    <li>Dedicated "Plugins" node under the root project — plugins from the catalog get their own update checks against the Gradle Plugin Portal</li>
+    <li>Handles inline versions, <code>version.ref</code>, rich versions (<code>strictly</code>, <code>require</code>, <code>prefer</code>), and shorthand forms</li>
+</ul>
+
+<h3>One-click apply update</h3>
+<ul>
+    <li>Right-click any outdated dep in the tool window → "Apply Update"</li>
+    <li>Edits either <code>build.gradle</code> or <code>libs.versions.toml</code> depending on where the version lives</li>
+    <li>Confirmation dialog when a shared <code>version.ref</code> would move multiple libraries or plugins</li>
+    <li>Single undo — Ctrl+Z reverts the version change cleanly</li>
+    <li>Preserves quote style, whitespace, and file formatting</li>
+</ul>
+
+<h3>Vulnerability (CVE) flagging</h3>
+<ul>
+    <li>Queries the OSV.dev database for known vulnerabilities on every dependency</li>
+    <li>Inline badge in the tool window: <code>⚠ N CVEs (SEVERITY)</code> with color-coded severity</li>
+    <li>Right-click → "Open Vulnerability Report" opens the OSV.dev page for the coordinate</li>
+    <li>6-hour on-disk cache — clean deps don't re-query every session</li>
+    <li>Batched requests, generous rate limits, fails silently on network errors</li>
+    <li>Toggle in Settings: "Check for vulnerabilities"</li>
+</ul>
+
+<h3>Editor integration — inspections, quick-fixes, gutter icons</h3>
+<ul>
+    <li>Squiggly underlines on outdated and vulnerable dependencies directly in the editor</li>
+    <li>Alt+Enter offers "Update to X" and "Open vulnerability report" quick-fixes</li>
+    <li>Gutter icons with click-to-update; hover for CVE details including fix versions</li>
+    <li><strong>TOML</strong>: catalog files (<code>*.versions.toml</code>)</li>
+    <li><strong>Groovy DSL</strong>: <code>build.gradle</code> inline coordinate literals</li>
+    <li><strong>Kotlin DSL</strong>: <code>build.gradle.kts</code> inline coordinate literals</li>
+    <li>Editor decorations only appear where actionable — BOM-managed entries are skipped. Both inline-version and <code>version.ref</code> library entries show icons; the click routes to the correct edit site automatically</li>
+    <li>Interpolated versions (<code>"\$var"</code>, <code>"\${expr}"</code>) are safely ignored — no false positives</li>
+    <li>Version-mismatch guard: no highlight when the file's version doesn't match the last-scanned state</li>
+</ul>
+
+<h3>Auto-refresh</h3>
+<ul>
+    <li>Tool window and editor decorations refresh automatically after Gradle sync completes</li>
+    <li>Also refreshes when any <code>*.versions.toml</code> file changes on disk</li>
+    <li>Debounced by 2 seconds to coalesce bursts</li>
+    <li>Only active after the tool window has been opened at least once per session</li>
+    <li>Toggle in Settings: "Auto-refresh on Gradle sync or catalog file changes"</li>
+</ul>
+
+<h3>Sort</h3>
+<ul>
+    <li>Tool window supports sorting dependencies by severity, alphabetically, or in declaration order</li>
+    <li>Default is by severity: vulnerable first (ordered by CVE severity), then outdated, then clean</li>
+    <li>Sort control available in the tool window title bar</li>
+</ul>
+
+<h3>Show only upgradable filter</h3>
+<ul>
+    <li>Toggle in the tool window title bar</li>
+    <li>Applied incrementally during load — modules fill as checks reveal updates, no flash-then-hide</li>
+    <li>Deps with only vulnerabilities (no update) stay hidden under this filter</li>
+</ul>
+
+<h3>Expand / Collapse all</h3>
+<ul>
+    <li>Buttons in the tool window title bar</li>
+    <li>Operate on the currently visible tree; respect any active filter</li>
+</ul>
+
+<h3>Jump to source</h3>
+<ul>
+    <li>Double-click any tree row to open its declaration in the editor</li>
+    <li>Right-click → "Jump to Source" as an alternative</li>
+    <li>Catalog libraries and plugins jump to <code>libs.versions.toml</code> at the version line — for <code>version.ref</code> entries, the shared <code>[versions]</code> key</li>
+    <li>Inline coord literals in <code>build.gradle</code> / <code>build.gradle.kts</code> jump to the exact position</li>
+    <li>Module nodes open that module's build file</li>
+</ul>
+
+<h3>Improved error handling</h3>
+<ul>
+    <li>Gradle plugin resolution failures (<code>UnknownPluginException</code>) are now attributed to the specific catalog plugin entry, not the whole module</li>
+    <li>Walks the entire exception cause chain to find the offending plugin ID</li>
+    <li>Short, single-line error messages in the tree; full stack still logged</li>
+    <li>Failed update checks render inline on the dep row instead of cluttering the tree with error children</li>
+</ul>
+
+<h3>Gradle execution settings passthrough</h3>
+<ul>
+    <li>Tooling API calls now honor IntelliJ's configured Gradle JDK, Gradle User Home, and environment variables</li>
+    <li>Fixes credentialed private repos (e.g. GitHub Packages) that worked for normal sync but not for our checks</li>
+</ul>
+
+<h3>Other fixes and improvements</h3>
+<ul>
+    <li>Local Maven repo (<code>file://</code> URLs) now works — no more <code>ClassCastException</code> on non-HTTP connections</li>
+    <li><code>maven-metadata-local.xml</code> also checked, catching artifacts installed via <code>mvn install</code></li>
+    <li>Proper XML parsing of <code>maven-metadata.xml</code> with XXE hardening (replaces regex)</li>
+    <li>Version comparison now handles qualifiers correctly: <code>1.2.3 &gt; 1.2.3-RC1</code>, <code>2.0.0 &gt; 1.9.9</code></li>
+    <li>URLs stripped of embedded credentials before logging</li>
+    <li>Gradle Plugin Portal added to the default repository list for new installs</li>
+    <li>Newer Gradle output format for project references (<code>project ':foo'</code>) now filtered out of the tree</li>
+    <li>Efficient tree updates using <code>DefaultTreeModel</code> notifications instead of full <code>tree.updateUI()</code></li>
+    <li>Bundles gson 2.11.0 and tomlj 1.1.1</li>
+    <li>Minimum supported IDE bumped to 2025.3 (build 253); toolchain updated to Java 21</li>
+</ul>
+<h2>2.1.1</h2>
+<ul>
+    <li>Update to IntelliJ Platform Gradle Plugin 2.18.1</li>
+    <li>Support IntelliJ IDEA 2026.2</li>
+</ul>
 <h2>2.1.0</h2>
 <ul>
     <li>Fix TreeUI should be accessed only from EDT</li>
