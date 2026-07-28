@@ -106,12 +106,44 @@ public final class DependencyStateService {
 
     private void index(Dependency dep) {
         if (dep == null || dep.getGroup() == null || dep.getName() == null || !dep.hasGroup()) return;
-        byCoordinate.put(dep.getGroup() + ":" + dep.getName(), dep);
+        var coord = dep.getGroup() + ":" + dep.getName();
+
+        // Carry over any prior instance's learned state before overwriting. Multiple modules that
+        // share a coord each supply a fresh Dependency; without this, the second module's upsertAll
+        // would wipe latestVersion / error / vulnerabilities that an earlier module's check already
+        // produced. propagateResult only fires on check completion, so once the check for a shared
+        // coord has completed, later upserts had no way to inherit its result.
+        var previous = byCoordinate.get(coord);
+        if (previous != null && previous != dep) {
+            if (dep.getLatestVersion() == null) dep.setLatestVersion(previous.getLatestVersion());
+            if (dep.getError() == null) dep.setError(previous.getError());
+            if (dep.getVulnerabilities() == null) dep.setVulnerabilities(previous.getVulnerabilities());
+        }
+
+        byCoordinate.put(coord, dep);
+
+        // Register under every catalog alias for this coord, not just dep.getCatalogEntry().key().
+        // A coord can appear under both a BOM-managed alias and a version-carrying alias — line
+        // markers/inspections on either TOML line need to find this same Dependency.
+        var cat = currentCatalog;
+        if (cat != null) {
+            var aliases = cat.findAllByCoordinate(dep.getGroup(), dep.getName());
+            for (var alias : aliases) {
+                switch (alias.kind()) {
+                    case LIBRARY -> byCatalogKey.put(alias.key(), dep);
+                    case PLUGIN -> byPluginKey.put(alias.key(), dep);
+                }
+            }
+        }
+
+        // Fallback: if catalog isn't loaded yet (shouldn't happen — setCatalog fires before
+        // upsertAll — but defend anyway) index under the entry attached to the dep.
         var entry = dep.getCatalogEntry();
-        if (entry == null) return;
-        switch (entry.kind()) {
-            case LIBRARY -> byCatalogKey.put(entry.key(), dep);
-            case PLUGIN -> byPluginKey.put(entry.key(), dep);
+        if (entry != null) {
+            switch (entry.kind()) {
+                case LIBRARY -> byCatalogKey.putIfAbsent(entry.key(), dep);
+                case PLUGIN -> byPluginKey.putIfAbsent(entry.key(), dep);
+            }
         }
     }
 }

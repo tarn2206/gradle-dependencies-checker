@@ -19,12 +19,22 @@ import java.util.regex.Pattern;
 public final class DependencyUpdater {
 
     public static Result apply(Project project, Dependency dep, @Nullable VersionCatalog catalog) {
+        return apply(project, dep, dep.getCatalogEntry(), catalog);
+    }
+
+    /**
+     * Overload that lets the caller name the entry to update explicitly, rather than falling back
+     * to {@code dep.getCatalogEntry()}. Used by editor decorations when a coord has multiple
+     * catalog aliases (one BOM-managed + one version-carrying), so a click on a specific TOML
+     * line routes to the right alias regardless of which one happens to be "primary" on the dep.
+     */
+    public static Result apply(Project project, Dependency dep, @Nullable CatalogEntry entry,
+                               @Nullable VersionCatalog catalog) {
         var newVersion = dep.getLatestVersion();
         if (newVersion == null) return Result.failed("No update available");
         if (dep.getVersion() == null) return Result.failed("Current version unknown");
 
         Result result;
-        var entry = dep.getCatalogEntry();
         if (entry != null && entry.hasEditableVersion()) {
             result = applyCatalog(project, dep, entry, catalog, newVersion);
         } else {

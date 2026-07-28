@@ -26,21 +26,24 @@ public final class VersionCatalog {
     private static final String DEFAULT_CATALOG_PATH = "gradle/libs.versions.toml";
 
     private final File tomlFile;
-    private final Map<String, String> versions;                    // version-key -> resolved version string
-    private final Map<String, CatalogEntry> byCoordinate;          // "group:name" -> library entry
-    private final List<CatalogEntry> plugins;                      // parsed [plugins] entries
-    private final Map<String, List<String>> versionKeyToLibraries; // version-key -> library keys
-    private final Map<String, List<String>> versionKeyToPlugins;   // version-key -> plugin keys
+    private final Map<String, String> versions;                          // version-key -> resolved version string
+    private final Map<String, List<CatalogEntry>> byCoordinate;          // "group:name" -> library entries (aliases)
+    private final Map<String, CatalogEntry> byKey;                       // catalog key -> entry (libs + plugins)
+    private final List<CatalogEntry> plugins;                            // parsed [plugins] entries
+    private final Map<String, List<String>> versionKeyToLibraries;       // version-key -> library keys
+    private final Map<String, List<String>> versionKeyToPlugins;         // version-key -> plugin keys
 
     private VersionCatalog(File tomlFile,
                            Map<String, String> versions,
-                           Map<String, CatalogEntry> byCoordinate,
+                           Map<String, List<CatalogEntry>> byCoordinate,
+                           Map<String, CatalogEntry> byKey,
                            List<CatalogEntry> plugins,
                            Map<String, List<String>> versionKeyToLibraries,
                            Map<String, List<String>> versionKeyToPlugins) {
         this.tomlFile = tomlFile;
         this.versions = Collections.unmodifiableMap(versions);
         this.byCoordinate = Collections.unmodifiableMap(byCoordinate);
+        this.byKey = Collections.unmodifiableMap(byKey);
         this.plugins = Collections.unmodifiableList(plugins);
         this.versionKeyToLibraries = Collections.unmodifiableMap(versionKeyToLibraries);
         this.versionKeyToPlugins = Collections.unmodifiableMap(versionKeyToPlugins);
@@ -69,7 +72,8 @@ public final class VersionCatalog {
 
     private static VersionCatalog build(File tomlFile, TomlParseResult toml) {
         var versions = new HashMap<String, String>();
-        var byCoord = new HashMap<String, CatalogEntry>();
+        var byCoord = new HashMap<String, List<CatalogEntry>>();
+        var byKey = new HashMap<String, CatalogEntry>();
         var plugins = new ArrayList<CatalogEntry>();
         var versionKeyToLibs = new HashMap<String, List<String>>();
         var versionKeyToPlugs = new HashMap<String, List<String>>();
@@ -89,16 +93,16 @@ public final class VersionCatalog {
                 if (parsed == null) continue;
 
                 var coord = parsed.group + ":" + parsed.name;
-                if (byCoord.containsKey(coord)) {
-                    LOG.warn("Version catalog: multiple entries map to " + coord
-                            + " (using '" + byCoord.get(coord).key()
-                            + "', ignoring '" + libKey + "')");
-                    continue;
-                }
-                byCoord.put(coord, new CatalogEntry(
+                var entry = new CatalogEntry(
                         CatalogEntry.Kind.LIBRARY, libKey, null,
                         parsed.versionRef, parsed.inlineVersion,
-                        tomlFile, parsed.versionLine));
+                        tomlFile, parsed.versionLine);
+
+                // Same coord may legitimately appear under multiple aliases (typical setup:
+                // one BOM-managed accessor + one version-carrying accessor for framework-agnostic
+                // modules). Track all aliases; downstream consumers pick which one they need.
+                byCoord.computeIfAbsent(coord, k -> new ArrayList<>()).add(entry);
+                byKey.put(libKey, entry);
 
                 if (parsed.versionRef != null) {
                     versionKeyToLibs.computeIfAbsent(parsed.versionRef, k -> new ArrayList<>()).add(libKey);
@@ -112,10 +116,12 @@ public final class VersionCatalog {
                 var parsed = parsePluginEntry(pluginKey, pluginsTable, tomlFile);
                 if (parsed == null) continue;
 
-                plugins.add(new CatalogEntry(
+                var entry = new CatalogEntry(
                         CatalogEntry.Kind.PLUGIN, pluginKey, parsed.pluginId,
                         parsed.versionRef, parsed.inlineVersion,
-                        tomlFile, parsed.versionLine));
+                        tomlFile, parsed.versionLine);
+                plugins.add(entry);
+                byKey.put(pluginKey, entry);
 
                 if (parsed.versionRef != null) {
                     versionKeyToPlugs.computeIfAbsent(parsed.versionRef, k -> new ArrayList<>()).add(pluginKey);
@@ -123,7 +129,8 @@ public final class VersionCatalog {
             }
         }
 
-        return new VersionCatalog(tomlFile, versions, byCoord, plugins, versionKeyToLibs, versionKeyToPlugs);
+        return new VersionCatalog(tomlFile, versions, byCoord, byKey, plugins,
+                versionKeyToLibs, versionKeyToPlugs);
     }
 
     private static @Nullable ParsedLibrary parseLibraryEntry(String libKey, TomlTable libraries, File tomlFile) {
@@ -253,9 +260,108 @@ public final class VersionCatalog {
         return null;
     }
 
+    private static boolean isBomCoord(String s) {
+        if (s == null) return false;
+        var lower = s.toLowerCase(java.util.Locale.ROOT);
+        return lower.endsWith("-bom") || lower.endsWith(".bom");
+    }
+
+    /**
+     * Returns the "primary" catalog entry for a coordinate. When multiple aliases exist for the
+     * same coord (BOM-managed alias plus a version-carrying alias), prefer one that carries an
+     * editable version — it's the actionable one for tool-window updates and jump-to-source.
+     * Falls back to the first alias when none is editable (all-BOM-managed coord).
+     */
     public @Nullable CatalogEntry findByCoordinate(String group, String name) {
+        var all = findAllByCoordinate(group, name);
+        if (all.isEmpty()) return null;
+        for (var e : all) {
+            if (e.hasEditableVersion()) return e;
+        }
+        return all.get(0);
+    }
+
+    /**
+     * Returns every catalog entry (alias) that maps to this coordinate. Empty list when unknown.
+     */
+    public List<CatalogEntry> findAllByCoordinate(String group, String name) {
+        if (group == null || name == null) return List.of();
+        return byCoordinate.getOrDefault(group + ":" + name, List.of());
+    }
+
+    /**
+     * O(1) lookup by catalog key. Covers both library and plugin entries.
+     */
+    public @Nullable CatalogEntry findEntryByKey(String key) {
+        return key == null ? null : byKey.get(key);
+    }
+
+    /**
+     * Best-effort discovery of the BOM that manages a given coordinate. Used to route "click to
+     * update" from a BOM-managed entry (no version in the TOML) to the BOM entry that controls
+     * the version. Heuristic-only — Gradle Tooling API would tell us authoritatively, but that's
+     * not something we currently ask for.
+     * <p>
+     * BOM signal: the module coord OR the catalog alias key ends with {@code -bom} / {@code .bom}
+     * (case-insensitive), and the entry carries an editable version. This is broader than checking
+     * the coord alone because some teams name aliases {@code foo-bom} while the module coord is
+     * just {@code foo-dependencies}.
+     * <p>
+     * Disambiguation across multiple BOM candidates:
+     * <ol>
+     *   <li>Aliases of the same BOM coord collapse into one candidate.</li>
+     *   <li>Prefer a BOM whose group matches the target dep's group.</li>
+     *   <li>Fall back to the first-seen candidate (alphabetical by catalog key). Better to guess
+     *       than to hide the badge entirely — worst case, the click bumps the wrong BOM, which is
+     *       trivially reversible.</li>
+     * </ol>
+     */
+    public @Nullable CatalogEntry findManagingBom(String group, String name) {
         if (group == null || name == null) return null;
-        return byCoordinate.get(group + ":" + name);
+        var selfCoord = group + ":" + name;
+        // Never claim a BOM manages itself.
+        if (isBomCoord(selfCoord)) return null;
+
+        // Collect distinct BOM coords with an editable representative entry. Aliases of the same
+        // coord collapse (LinkedHashMap keeps deterministic order for the fallback).
+        var candidates = new java.util.LinkedHashMap<String, CatalogEntry>();
+        for (var e : byCoordinate.entrySet()) {
+            var coord = e.getKey();
+            for (var entry : e.getValue()) {
+                if (!entry.hasEditableVersion()) continue;
+                if (isBomCoord(coord) || isBomCoord(entry.key())) {
+                    candidates.putIfAbsent(coord, entry);
+                    break;
+                }
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            LOG.warn("findManagingBom(" + selfCoord + "): no BOM candidates in catalog. "
+                    + "Any library entry with editable version whose module coord or alias key ends "
+                    + "in '-bom' or '.bom' would count.");
+            return null;
+        }
+        if (candidates.size() == 1) {
+            return candidates.values().iterator().next();
+        }
+
+        // Multiple BOMs — prefer one whose coord's group matches the target dep's group.
+        for (var e : candidates.entrySet()) {
+            var coord = e.getKey();
+            var colon = coord.indexOf(':');
+            if (colon > 0 && coord.substring(0, colon).equals(group)) return e.getValue();
+        }
+
+        // Nothing matched by group. Sort candidates by alias key for a stable pick, and take the
+        // first — the alternative (returning null) would silently drop badges the user needs.
+        var picked = candidates.values().stream()
+                .min(java.util.Comparator.comparing(CatalogEntry::key))
+                .orElse(null);
+        LOG.warn("findManagingBom(" + selfCoord + "): multiple BOM candidates, none in group; "
+                + "candidates=" + candidates.keySet() + ", picking '"
+                + (picked == null ? "?" : picked.key()) + "'");
+        return picked;
     }
 
     public List<CatalogEntry> getPlugins() {
