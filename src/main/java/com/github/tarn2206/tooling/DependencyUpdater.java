@@ -43,13 +43,61 @@ public final class DependencyUpdater {
 
         if (result.status() == Status.UPDATED) {
             // Invalidate cached data for the pre-update version. Editor decorations go quiet
-            // immediately; the next refresh (~2s via auto-refresh) will re-check against the
-            // new version and repopulate with accurate state.
+            // immediately; the next refresh will re-check against the new version and repopulate.
             dep.setLatestVersion(null);
             dep.setVulnerabilities(null);
+            clearSiblingsAfterUpdate(project, dep, entry, catalog);
         }
 
         return result;
+    }
+
+    /**
+     * After a successful catalog update, invalidate {@code latestVersion} on any other Dependency
+     * whose value in the tool window is now stale.
+     * <p>
+     * Two waves:
+     * <ol>
+     *   <li>Anything using the same {@code version.ref} — those literals moved with this update
+     *       even though we didn't click on them individually.</li>
+     *   <li>If the entry we just bumped looks like a BOM (module coord ends {@code -bom}/{@code .bom}),
+     *       every BOM-managed library entry too — their resolved versions change transitively via
+     *       the BOM, so their badges are stale. This is a broad brush in multi-BOM catalogs (deps
+     *       actually managed by a *different* BOM will get their badges cleared unnecessarily and
+     *       reappear on next refresh), but the alternative — leaving a wrong-versioned badge that
+     *       fails on click — is worse.</li>
+     * </ol>
+     * All the mutation is on in-memory Dependency objects; the actual file was already written by
+     * {@link #applyCatalog}. Caller is responsible for calling {@code state.notifyChange()} so the
+     * editor daemon repaints — this is already done by every editor-side caller.
+     */
+    private static void clearSiblingsAfterUpdate(Project project, Dependency updatedDep,
+                                                 @Nullable CatalogEntry entry,
+                                                 @Nullable VersionCatalog catalog) {
+        if (entry == null || catalog == null) return;
+        var state = project.getService(DependencyStateService.class);
+
+        if (entry.versionRef() != null) {
+            var vk = entry.versionRef();
+            for (var libKey : catalog.librariesUsingVersionKey(vk)) {
+                clearOne(state.byCatalogKey(libKey), updatedDep);
+            }
+            for (var pluginKey : catalog.pluginsUsingVersionKey(vk)) {
+                clearOne(state.byPluginKey(pluginKey), updatedDep);
+            }
+        }
+
+        if (VersionCatalog.looksLikeBomCoord(updatedDep.getGroup(), updatedDep.getName())) {
+            for (var bomManaged : catalog.bomManagedLibraries()) {
+                clearOne(state.byCatalogKey(bomManaged.key()), updatedDep);
+            }
+        }
+    }
+
+    private static void clearOne(@Nullable Dependency d, Dependency skip) {
+        if (d == null || d == skip) return;
+        d.setLatestVersion(null);
+        d.setVulnerabilities(null);
     }
 
     private static Result applyCatalog(Project project, Dependency dep, CatalogEntry entry,

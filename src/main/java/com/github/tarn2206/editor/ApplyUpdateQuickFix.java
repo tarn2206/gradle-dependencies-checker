@@ -60,6 +60,9 @@ public class ApplyUpdateQuickFix implements LocalQuickFix {
             return;
         }
 
+        // Honor "auto-refresh after apply" — same rationale as the editor badge click.
+        var autoRefresh = project.getService(com.github.tarn2206.tooling.AutoRefreshHook.class);
+        autoRefresh.suppressNextIfConfigured();
         var result = DependencyUpdater.apply(project, dep, state.getCatalog());
 
         switch (result.status()) {
@@ -67,6 +70,7 @@ public class ApplyUpdateQuickFix implements LocalQuickFix {
                 // Prevent the same inspection from re-firing until the next refresh confirms the new state.
                 dep.setLatestVersion(null);
                 state.notifyChange();
+                autoRefresh.onEditorApplyCompleted();
                 notify(project, result.message(), NotificationType.INFORMATION);
             }
             case NOT_FOUND -> {

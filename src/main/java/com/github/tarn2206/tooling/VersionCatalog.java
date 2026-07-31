@@ -260,12 +260,6 @@ public final class VersionCatalog {
         return null;
     }
 
-    private static boolean isBomCoord(String s) {
-        if (s == null) return false;
-        var lower = s.toLowerCase(java.util.Locale.ROOT);
-        return lower.endsWith("-bom") || lower.endsWith(".bom");
-    }
-
     /**
      * Returns the "primary" catalog entry for a coordinate. When multiple aliases exist for the
      * same coord (BOM-managed alias plus a version-carrying alias), prefer one that carries an
@@ -362,6 +356,40 @@ public final class VersionCatalog {
                 + "candidates=" + candidates.keySet() + ", picking '"
                 + (picked == null ? "?" : picked.key()) + "'");
         return picked;
+    }
+
+    private static boolean isBomCoord(String s) {
+        if (s == null) return false;
+        var lower = s.toLowerCase(java.util.Locale.ROOT);
+        return lower.endsWith("-bom") || lower.endsWith(".bom");
+    }
+
+    /**
+     * True if the given coord looks like a BOM (module coord ends in {@code -bom} or {@code .bom},
+     * case-insensitive). Exposed so callers outside VersionCatalog can decide whether a bump
+     * cascades through BOM-managed deps.
+     */
+    public static boolean looksLikeBomCoord(@Nullable String group, @Nullable String name) {
+        if (group == null || name == null) return false;
+        return isBomCoord(group + ":" + name);
+    }
+
+    /**
+     * Returns every library entry that has no editable version (i.e., BOM-managed). Used after a
+     * BOM update to invalidate cached {@code latestVersion} on deps whose actual version is about
+     * to change transitively via the BOM bump — so their badges go quiet without waiting for the
+     * full refresh.
+     */
+    public List<CatalogEntry> bomManagedLibraries() {
+        var result = new ArrayList<CatalogEntry>();
+        for (var entries : byCoordinate.values()) {
+            for (var e : entries) {
+                if (e.kind() == CatalogEntry.Kind.LIBRARY && !e.hasEditableVersion()) {
+                    result.add(e);
+                }
+            }
+        }
+        return result;
     }
 
     public List<CatalogEntry> getPlugins() {

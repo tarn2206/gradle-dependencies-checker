@@ -1,5 +1,6 @@
 package com.github.tarn2206.editor;
 
+import com.github.tarn2206.tooling.AutoRefreshHook;
 import com.github.tarn2206.tooling.CatalogEntry;
 import com.github.tarn2206.tooling.Dependency;
 import com.github.tarn2206.tooling.DependencyStateService;
@@ -55,50 +56,6 @@ public class DependencyLineMarkerProvider extends LineMarkerProviderDescriptor {
     @Override
     public @Nullable String getName() {
         return "Gradle dependency updates & vulnerabilities";
-    }
-
-    private static String buildUpdateTooltip(Dependency sourceDep,
-                                             @Nullable Dependency updateDep,
-                                             @Nullable CatalogEntry updateVia) {
-        if (updateDep == null) return "";
-        if (updateDep == sourceDep) {
-            return "Update available: " + sourceDep.getVersion() + " → " + updateDep.getLatestVersion();
-        }
-        return "<html>Update available for <b>" + sourceDep.getGroup() + ":" + sourceDep.getName()
-                + "</b><br>Managed by BOM <code>" + updateVia.key() + "</code>."
-                + "<br><br><i>Click to bump the BOM to " + updateDep.getLatestVersion() + ".</i></html>";
-    }
-
-    private static String buildVulnTooltip(Dependency sourceDep, List<Vulnerability> vulns,
-                                           boolean hasUpdate,
-                                           @Nullable Dependency updateDep,
-                                           @Nullable CatalogEntry updateVia) {
-        var top = highestSeverity(vulns);
-        var sb = new StringBuilder("<html>");
-        sb.append("<b>").append(vulns.size())
-                .append(vulns.size() == 1 ? " known vulnerability" : " known vulnerabilities")
-                .append("</b> (").append(top.name()).append(")<br>");
-        var maxShown = Math.min(vulns.size(), 5);
-        for (var i = 0; i < maxShown; i++) {
-            var v = vulns.get(i);
-            sb.append("• ").append(v.id()).append(" — ").append(v.severity().name());
-            if (v.fixedVersion() != null) sb.append(" (fixed in ").append(v.fixedVersion()).append(")");
-            sb.append("<br>");
-        }
-        if (vulns.size() > maxShown) sb.append("… and ").append(vulns.size() - maxShown).append(" more<br>");
-        sb.append("<br><i>Click to ");
-        if (hasUpdate && updateDep != null) {
-            if (updateDep == sourceDep) {
-                sb.append("update to ").append(updateDep.getLatestVersion());
-            } else {
-                sb.append("bump BOM ").append(updateVia.key())
-                        .append(" to ").append(updateDep.getLatestVersion());
-            }
-        } else {
-            sb.append("open OSV.dev");
-        }
-        sb.append("</i></html>");
-        return sb.toString();
     }
 
     @Override
@@ -255,12 +212,61 @@ public class DependencyLineMarkerProvider extends LineMarkerProviderDescriptor {
         );
     }
 
+    private static String buildUpdateTooltip(Dependency sourceDep,
+                                             @Nullable Dependency updateDep,
+                                             @Nullable CatalogEntry updateVia) {
+        if (updateDep == null) return "";
+        if (updateDep == sourceDep) {
+            return "Update available: " + sourceDep.getVersion() + " → " + updateDep.getLatestVersion();
+        }
+        return "<html>Update available for <b>" + sourceDep.getGroup() + ":" + sourceDep.getName()
+                + "</b><br>Managed by BOM <code>" + updateVia.key() + "</code>."
+                + "<br><br><i>Click to bump the BOM to " + updateDep.getLatestVersion() + ".</i></html>";
+    }
+
+    private static String buildVulnTooltip(Dependency sourceDep, List<Vulnerability> vulns,
+                                           boolean hasUpdate,
+                                           @Nullable Dependency updateDep,
+                                           @Nullable CatalogEntry updateVia) {
+        var top = highestSeverity(vulns);
+        var sb = new StringBuilder("<html>");
+        sb.append("<b>").append(vulns.size())
+                .append(vulns.size() == 1 ? " known vulnerability" : " known vulnerabilities")
+                .append("</b> (").append(top.name()).append(")<br>");
+        var maxShown = Math.min(vulns.size(), 5);
+        for (var i = 0; i < maxShown; i++) {
+            var v = vulns.get(i);
+            sb.append("• ").append(v.id()).append(" — ").append(v.severity().name());
+            if (v.fixedVersion() != null) sb.append(" (fixed in ").append(v.fixedVersion()).append(")");
+            sb.append("<br>");
+        }
+        if (vulns.size() > maxShown) sb.append("… and ").append(vulns.size() - maxShown).append(" more<br>");
+        sb.append("<br><i>Click to ");
+        if (hasUpdate && updateDep != null) {
+            if (updateDep == sourceDep) {
+                sb.append("update to ").append(updateDep.getLatestVersion());
+            } else {
+                sb.append("bump BOM ").append(updateVia.key())
+                        .append(" to ").append(updateDep.getLatestVersion());
+            }
+        } else {
+            sb.append("open OSV.dev");
+        }
+        sb.append("</i></html>");
+        return sb.toString();
+    }
+
     private void handleClick(PsiElement element, Dependency sourceDep,
                              @Nullable Dependency updateDep, @Nullable CatalogEntry updateVia,
                              boolean hasVulns) {
         var project = element.getProject();
         if (updateDep != null) {
             var state = project.getService(DependencyStateService.class);
+            var autoRefresh = project.getService(AutoRefreshHook.class);
+            // Honor the "auto-refresh after apply" setting — when off, the imminent VFS event from
+            // this apply won't kick off a Gradle re-sync, so the user can click the next badge
+            // right away instead of waiting.
+            autoRefresh.suppressNextIfConfigured();
             DependencyUpdater.apply(project, updateDep, updateVia, state.getCatalog());
             // Clear both — the routed dep (in case DependencyUpdater cleared it too, no harm) and
             // the source dep so the badge on THIS line goes quiet immediately. The next refresh
@@ -268,6 +274,9 @@ public class DependencyLineMarkerProvider extends LineMarkerProviderDescriptor {
             updateDep.setLatestVersion(null);
             if (updateDep != sourceDep) sourceDep.setLatestVersion(null);
             state.notifyChange();
+            // Ask the tool window to re-hide rows that just stopped being upgradable, so the tree
+            // stays consistent with the filter even when the full refresh is suppressed.
+            autoRefresh.onEditorApplyCompleted();
         } else if (hasVulns) {
             var coord = URLEncoder.encode(sourceDep.getGroup() + ":" + sourceDep.getName(),
                     StandardCharsets.UTF_8);

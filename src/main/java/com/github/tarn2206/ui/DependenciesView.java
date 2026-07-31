@@ -9,6 +9,7 @@ import com.github.tarn2206.actions.RefreshAction;
 import com.github.tarn2206.actions.SettingsAction;
 import com.github.tarn2206.actions.ShowOnlyUpgradableAction;
 import com.github.tarn2206.actions.SortAction;
+import com.github.tarn2206.actions.SyncGradleAction;
 import com.github.tarn2206.actions.ViewVulnerabilitiesAction;
 import com.github.tarn2206.tooling.Dependency;
 import com.github.tarn2206.tooling.DependencyStateService;
@@ -209,10 +210,14 @@ public class DependenciesView extends SimpleToolWindowPanel {
     public void initToolWindow(ToolWindow toolWindow) {
         toolWindow.setTitleActions(List.of(
                 new RefreshAction(this),
+                new SyncGradleAction(),
+                Separator.getInstance(),
                 new ShowOnlyUpgradableAction(this),
+                Separator.getInstance(),
                 new ExpandAllAction(this),
                 new CollapseAllAction(this),
                 new SortAction(this),
+                Separator.getInstance(),
                 new SettingsAction(this)));
 
         var contentFactory = ApplicationManager.getApplication().getService(ContentFactory.class);
@@ -227,9 +232,22 @@ public class DependenciesView extends SimpleToolWindowPanel {
         installDoubleClickNavigation();
         setContent(new JBScrollPane(tree));
 
-        project.getService(com.github.tarn2206.tooling.AutoRefreshHook.class).install(this::update);
+        project.getService(com.github.tarn2206.tooling.AutoRefreshHook.class)
+                .install(this::update, this::rebalanceUpgradableFilter);
 
         update();
+    }
+
+    /**
+     * Called after every editor-driven apply. If the "show only upgradable" filter is on, any row
+     * that just stopped being upgradable (because {@link com.github.tarn2206.tooling.DependencyUpdater}
+     * cleared its {@code latestVersion} either directly or via the version-key / BOM cascade) is
+     * moved out of the visible tree and into the hidden-nodes stash. No-op if the filter is off —
+     * the row stays visible; the renderer already grays cleared rows so it's not misleading.
+     */
+    public void rebalanceUpgradableFilter() {
+        if (!AppSettings.getInstance().isShowOnlyUpgradable()) return;
+        applyUpgradableFilter();
     }
 
     private void installPopupMenu() {

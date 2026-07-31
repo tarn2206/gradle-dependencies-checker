@@ -24,6 +24,7 @@ public class AppSettings implements PersistentStateComponent<AppSettings> {
     private String unstablePatterns;
     private boolean checkVulnerabilities = true;
     private boolean autoRefresh = true;
+    private boolean autoRefreshAfterApply = true;
     private SortOrder sortOrder = SortOrder.BY_SEVERITY;
     private boolean showOnlyUpgradable = false;
 

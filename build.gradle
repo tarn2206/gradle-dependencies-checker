@@ -41,7 +41,6 @@ dependencies {
   implementation 'com.google.code.gson:gson:2.14.0'
   compileOnly 'org.projectlombok:lombok:1.18.46'
   annotationProcessor 'org.projectlombok:lombok:1.18.46'
-  testImplementation 'junit:junit:4.13.2'
 }
 
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType

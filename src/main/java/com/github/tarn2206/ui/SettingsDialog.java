@@ -21,6 +21,7 @@ public class SettingsDialog extends DialogWrapper {
     private JBTextField unstablePatterns;
     private JBCheckBox checkVulnerabilities;
     private JBCheckBox autoRefresh;
+    private JBCheckBox autoRefreshAfterApply;
     private RepositoryTable table;
 
     public SettingsDialog() {
@@ -32,7 +33,7 @@ public class SettingsDialog extends DialogWrapper {
 
     @Override
     protected JComponent createCenterPanel() {
-        var layout = new GridLayoutManager(7, 1);
+        var layout = new GridLayoutManager(8, 1);
         layout.setMargin(JBUI.insets(5));
         var panel = new JPanel(layout);
 
@@ -41,6 +42,7 @@ public class SettingsDialog extends DialogWrapper {
         panel.add(createUnstableTextField(), new GridConstraints(4, 0, 1, 1, 0, 3, 3, 0, null, null, null));
         panel.add(createVulnerabilityCheckBox(), new GridConstraints(5, 0, 1, 1, 8, 0, 3, 0, null, null, null));
         panel.add(createAutoRefreshCheckBox(), new GridConstraints(6, 0, 1, 1, 8, 0, 3, 0, null, null, null));
+        panel.add(createAutoRefreshAfterApplyCheckBox(), new GridConstraints(7, 0, 1, 1, 8, 0, 3, 0, null, null, null));
 
         loadSettings();
 
@@ -98,6 +100,16 @@ public class SettingsDialog extends DialogWrapper {
         return panel;
     }
 
+    private JPanel createAutoRefreshAfterApplyCheckBox() {
+        autoRefreshAfterApply = new JBCheckBox("Auto-refresh after applying an update from the editor");
+        var layout = new GridLayoutManager(2, 1);
+        layout.setMargin(JBUI.insetsTop(10));
+        var panel = new JPanel(layout);
+        panel.add(autoRefreshAfterApply, new GridConstraints(0, 0, 1, 1, 8, 0, 3, 0, null, null, null));
+        addHint(panel, 1, 0, "Off: click multiple badges in a row without a Gradle re-sync each time. Refresh manually when ready.");
+        return panel;
+    }
+
     private void addHint(JPanel panel, int row, int column, String text) {
         var hint = new JLabel(text);
         hint.setForeground(UIUtil.getContextHelpForeground());
@@ -120,6 +132,7 @@ public class SettingsDialog extends DialogWrapper {
 
         checkVulnerabilities.setSelected(settings.isCheckVulnerabilities());
         autoRefresh.setSelected(settings.isAutoRefresh());
+        autoRefreshAfterApply.setSelected(settings.isAutoRefreshAfterApply());
     }
 
     public void saveSettings() {
@@ -128,6 +141,7 @@ public class SettingsDialog extends DialogWrapper {
         settings.setUnstablePatterns(unstablePatterns.getText());
         settings.setCheckVulnerabilities(checkVulnerabilities.isSelected());
         settings.setAutoRefresh(autoRefresh.isSelected());
+        settings.setAutoRefreshAfterApply(autoRefreshAfterApply.isSelected());
         // Invalidate MavenUtils cache — repo list or unstable rules may have changed.
         com.github.tarn2206.tooling.MavenUtils.clearCache();
     }
