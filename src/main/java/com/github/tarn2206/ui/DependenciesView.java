@@ -171,8 +171,11 @@ public class DependenciesView extends SimpleToolWindowPanel {
     }
 
     /**
-     * Real library dependencies (with group) come first, sorted by comparator. Sub-project name
-     * nodes and the "Plugins" string node keep their declared positions (stable sort with 0).
+     * Real library dependencies (with group) come first, sorted by the user-chosen comparator.
+     * Among the remaining "category" nodes (sub-project folders and the "Plugins" string node),
+     * sort sub-projects alphabetically and keep "Plugins" pinned at the bottom — that ordering is
+     * fixed regardless of the user's dep sort setting, so a filter toggle doesn't shuffle the
+     * previously-hidden groups to the end after they're restored.
      */
     private static int compareTreeNodes(DefaultMutableTreeNode a, DefaultMutableTreeNode b,
                                         Comparator<Dependency> comparator) {
@@ -183,7 +186,13 @@ public class DependenciesView extends SimpleToolWindowPanel {
         if (libA != null && libB != null) return comparator.compare(libA, libB);
         if (libA != null) return -1;
         if (libB != null) return 1;
-        return 0;
+        // Both are category nodes. Sub-project Dependency nodes come before String nodes ("Plugins")
+        // so the plugins section always ends up at the bottom, then alphabetical within each class.
+        var subA = oa instanceof Dependency;
+        var subB = ob instanceof Dependency;
+        if (subA && !subB) return -1;
+        if (!subA && subB) return 1;
+        return nodeName(a).compareToIgnoreCase(nodeName(b));
     }
 
     /**
@@ -894,22 +903,31 @@ public class DependenciesView extends SimpleToolWindowPanel {
     }
 
     /**
-     * Remove any library dep (with group) that has no meaningful update. Empty modules stay in
-     * place so tree structure is still visible. Kept nodes get pushed into {@link #hiddenNodes}
-     * so we can restore them when the filter is turned off.
+     * Two-pass hide of everything not upgradable:
+     * <ol>
+     *   <li>Remove every library dep (with group) whose {@code hasMeaningfulUpdate()} is false.</li>
+     *   <li>Remove every non-{@link Dependency} node that no longer has visible children — sub-project
+     *       folders, module folders, the "Plugins" string node. Iterated in post-order so hiding a
+     *       leaf module cascades: its parent's {@code getChildCount()} drops to zero on the next
+     *       iteration and it too gets hidden.</li>
+     * </ol>
+     * All removals are stashed in {@link #hiddenNodes} in the order they happen (leaves first, then
+     * ancestors) so {@link #restoreHiddenInternal()} can bring them back parent-before-child by
+     * iterating in reverse.
      */
     private void applyUpgradableFilter() {
-        var toHide = new ArrayList<DefaultMutableTreeNode>();
-        var enumeration = rootNode.depthFirstEnumeration();
-        while (enumeration.hasMoreElements()) {
-            var node = (DefaultMutableTreeNode) enumeration.nextElement();
+        // Pass 1 — hide non-upgradable dep nodes.
+        var toHideDeps = new ArrayList<DefaultMutableTreeNode>();
+        var enum1 = rootNode.depthFirstEnumeration();
+        while (enum1.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) enum1.nextElement();
             if (node.getUserObject() instanceof Dependency dep
                     && dep.hasGroup()
                     && !dep.hasMeaningfulUpdate()) {
-                toHide.add(node);
+                toHideDeps.add(node);
             }
         }
-        for (var node : toHide) {
+        for (var node : toHideDeps) {
             var parent = (DefaultMutableTreeNode) node.getParent();
             if (parent == null) continue;
             var index = parent.getIndex(node);
@@ -917,28 +935,51 @@ public class DependenciesView extends SimpleToolWindowPanel {
             treeModel.nodesWereRemoved(parent, new int[]{index}, new Object[]{node});
             hiddenNodes.add(new HiddenNode(parent, node));
         }
+
+        // Pass 2 — hide category nodes (sub-project folders, "Plugins", anything that isn't a real
+        // library dep) that have no visible children left. Note that sub-project folders carry a
+        // Dependency user-object too (a name-only one created by addProject); the group check is
+        // what tells them apart from actual library deps. Snapshot in post-order so the loop
+        // naturally processes deepest first; a category's live getChildCount() then reflects
+        // removals its own descendants caused earlier in the same loop.
+        var categoryNodes = new ArrayList<DefaultMutableTreeNode>();
+        var enum2 = rootNode.depthFirstEnumeration();
+        while (enum2.hasMoreElements()) {
+            var node = (DefaultMutableTreeNode) enum2.nextElement();
+            if (node == rootNode) continue;
+            // Real library deps (with group) were handled in pass 1 — skip them here.
+            if (node.getUserObject() instanceof Dependency dep && dep.hasGroup()) continue;
+            categoryNodes.add(node);
+        }
+        for (var node : categoryNodes) {
+            if (node.getChildCount() > 0) continue;
+            var parent = (DefaultMutableTreeNode) node.getParent();
+            if (parent == null) continue; // safety: already detached
+            var index = parent.getIndex(node);
+            if (index < 0) continue;
+            parent.remove(index);
+            treeModel.nodesWereRemoved(parent, new int[]{index}, new Object[]{node});
+            hiddenNodes.add(new HiddenNode(parent, node));
+        }
     }
 
     /**
-     * Put every stashed hidden node back into its original parent. Order is fixed by a subsequent sort.
+     * Put every stashed hidden node back into its original parent. Iterated in reverse insertion
+     * order so ancestor categories are re-attached before their descendants — required now that
+     * {@link #applyUpgradableFilter} can hide multi-level structure (leaf → module → sub-project).
+     * A subsequent {@code applyCurrentSort()} fixes sibling ordering.
      */
     private void restoreHiddenInternal() {
         if (hiddenNodes.isEmpty()) return;
-        var byParent = new LinkedHashMap<DefaultMutableTreeNode, List<DefaultMutableTreeNode>>();
-        for (var hidden : hiddenNodes) {
-            byParent.computeIfAbsent(hidden.parent(), k -> new ArrayList<>()).add(hidden.child());
+        for (var i = hiddenNodes.size() - 1; i >= 0; i--) {
+            var hidden = hiddenNodes.get(i);
+            var parent = hidden.parent();
+            var child = hidden.child();
+            var index = parent.getChildCount();
+            parent.add(child);
+            treeModel.nodesWereInserted(parent, new int[]{index});
         }
         hiddenNodes.clear();
-        for (var entry : byParent.entrySet()) {
-            var parent = entry.getKey();
-            var children = entry.getValue();
-            var insertedIndices = new int[children.size()];
-            for (var i = 0; i < children.size(); i++) {
-                insertedIndices[i] = parent.getChildCount();
-                parent.add(children.get(i));
-            }
-            treeModel.nodesWereInserted(parent, insertedIndices);
-        }
     }
 
     /**
