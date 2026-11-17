@@ -7,15 +7,22 @@
         Check gradle projects dependencies for version upgrades.
     ]]></description>
 
+    <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.java</depends>
     <depends>com.intellij.gradle</depends>
+    <depends optional="true" config-file="dependency-updates-toml.xml">org.toml.lang</depends>
+    <depends optional="true" config-file="dependency-updates-groovy.xml">org.intellij.groovy</depends>
+    <depends optional="true" config-file="dependency-updates-kotlin.xml">org.jetbrains.kotlin</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="com.github.tarn2206.AppSettings"/>
+        <projectService serviceImplementation="com.github.tarn2206.tooling.DependencyStateService"/>
+        <projectService serviceImplementation="com.github.tarn2206.tooling.AutoRefreshHook"/>
         <toolWindow id="Dependency Updates"
                     icon="/icons/toolWindow.svg"
                     anchor="right" doNotActivateOnStart="true"
                     factoryClass="com.github.tarn2206.ui.DependenciesToolWindowFactory"/>
+        <notificationGroup id="Dependency Updates" displayType="BALLOON"/>
     </extensions>
 
     <actions>

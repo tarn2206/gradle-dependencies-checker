@@ -1,0 +1,18 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <localInspection language="kotlin"
+                         displayName="Outdated Gradle dependency"
+                         groupName="Gradle"
+                         enabledByDefault="true"
+                         level="WEAK WARNING"
+                         implementationClass="com.github.tarn2206.editor.OutdatedDependencyKotlinInspection"/>
+        <localInspection language="kotlin"
+                         displayName="Vulnerable Gradle dependency"
+                         groupName="Gradle"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="com.github.tarn2206.editor.VulnerableDependencyKotlinInspection"/>
+        <codeInsight.lineMarkerProvider language="kotlin"
+                                        implementationClass="com.github.tarn2206.editor.DependencyKotlinLineMarkerProvider"/>
+    </extensions>
+</idea-plugin>

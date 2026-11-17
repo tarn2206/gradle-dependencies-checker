@@ -5,20 +5,16 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.wm.ToolWindowManager;
 import org.jetbrains.annotations.NotNull;
 
-public class CheckForUpdates extends AnAction
-{
+public class CheckForUpdates extends AnAction {
     private static final String TOOL_WINDOW_ID = "Dependency Updates";
 
     @Override
-    public void actionPerformed(@NotNull AnActionEvent e)
-    {
+    public void actionPerformed(@NotNull AnActionEvent e) {
         var project = e.getProject();
-        if (project != null)
-        {
+        if (project != null) {
             var toolWindowManager = ToolWindowManager.getInstance(project);
             var toolWindow = toolWindowManager.getToolWindow(TOOL_WINDOW_ID);
-            if (toolWindow != null)
-            {
+            if (toolWindow != null) {
                 toolWindow.show(null);
             }
         }

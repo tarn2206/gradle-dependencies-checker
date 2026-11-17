@@ -6,11 +6,9 @@ import java.util.List;
 /**
  * @author tarn on 09 March 2022 16:49
  */
-public record ProjectInfo(String name, File buildFile, List<ProjectInfo> children)
-{
+public record ProjectInfo(String name, File buildFile, List<ProjectInfo> children) {
     @Override
-    public String toString()
-    {
+    public String toString() {
         return name;
     }
 }
