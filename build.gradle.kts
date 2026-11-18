@@ -1,46 +1,35 @@
-plugins {
-  id 'java'
-  id 'org.jetbrains.intellij.platform' version '2.10.5'
-}
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.models.ProductRelease
 
-group 'com.github.tarn2206'
-version '2.1.0'
+plugins {
+  java
+  id("org.jetbrains.changelog")
+  id("org.jetbrains.intellij.platform")
+}
 
 java {
   toolchain {
-    languageVersion = JavaLanguageVersion.of(17)
+    languageVersion.set(JavaLanguageVersion.of(21))
   }
 }
 
-configurations {
-  compileOnly {
-    extendsFrom annotationProcessor
-  }
-}
-
-repositories {
-  mavenCentral()
-
-  intellijPlatform {
-    defaultRepositories()
-  }
-}
-
+// Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
+  implementation(gradleApi())
+  compileOnly(libs.lombok)
+  annotationProcessor(libs.lombok)
+  testImplementation(libs.junit)
+
+  // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
   intellijPlatform {
-    intellijIdeaCommunity '2023.1'
-    bundledPlugins("com.intellij.java", "com.intellij.gradle", "org.jetbrains.android")
-    instrumentationTools()
+    intellijIdea("2025.1")
+    testFramework(TestFrameworkType.Platform)
+
+    bundledPlugins("com.intellij.java", "com.intellij.gradle")
     pluginVerifier()
   }
-  implementation gradleApi()
-  compileOnly 'org.projectlombok:lombok:1.18.38'
-  annotationProcessor 'org.projectlombok:lombok:1.18.38'
-  testImplementation 'junit:junit:4.13.2'
 }
-
-import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
-import org.jetbrains.intellij.platform.gradle.models.ProductRelease
 
 // https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html#intellijPlatform-pluginVerification-ides
 // https://plugins.jetbrains.com/docs/intellij/build-number-ranges.html#platformVersions
@@ -49,21 +38,23 @@ intellijPlatform {
     ides {
       recommended()
       select {
-        it.types = [IntelliJPlatformType.IntellijIdeaCommunity]
-        it.channels = [ProductRelease.Channel.RELEASE]
-        it.sinceBuild = '231'
-        it.untilBuild = '253.*'
+        types.set(listOf(IntelliJPlatformType.IntellijIdeaCommunity))
+        channels.set(listOf(ProductRelease.Channel.RELEASE))
+        sinceBuild.set("251")
+        untilBuild.set("263.*")
       }
     }
   }
 }
 
-buildSearchableOptions.enabled = false
+tasks.buildSearchableOptions {
+  enabled = false
+}
 
-patchPluginXml {
-  sinceBuild = "231"
-  untilBuild = provider { null }
-  changeNotes = """
+tasks.patchPluginXml {
+  sinceBuild.set("251")
+  untilBuild.set(provider<String> { null })
+  changeNotes.set("""
 <h2>2.1.0</h2>
 <ul>
     <li>Fix TreeUI should be accessed only from EDT</li>
@@ -124,5 +115,5 @@ patchPluginXml {
     <li>Support multi-project build</li>
     <li>Remove require dependencies plugins</li>
 </ul>
-"""
+""")
 }
