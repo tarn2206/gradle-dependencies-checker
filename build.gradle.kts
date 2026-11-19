@@ -17,6 +17,7 @@ java {
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
   implementation(gradleApi())
+  implementation(libs.maven.artifact) { isTransitive = false }
   compileOnly(libs.lombok)
   annotationProcessor(libs.lombok)
   testImplementation(libs.junit)
