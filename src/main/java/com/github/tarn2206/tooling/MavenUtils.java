@@ -1,5 +1,7 @@
 package com.github.tarn2206.tooling;
 
+import java.util.ArrayList;
+
 import com.github.tarn2206.AppSettings;
 import com.intellij.openapi.diagnostic.Logger;
 import org.apache.commons.lang3.StringUtils;
@@ -15,7 +17,15 @@ public final class MavenUtils {
 
     public static void checkForUpdate(Dependency dependency, AppSettings settings) {
         var unstablePatterns = settings.isIgnoreUnstable() ? settings.getUnstablePatterns() : null;
-        for (var repository : settings.getRepos()) {
+        var repositories = new ArrayList<>(settings.getRepos());
+        if (dependency.getPluginId() != null || dependency.isBuildscriptPlugin()) {
+            // Preserve configured repository priority; the portal is a fallback for plugin markers.
+            var portal = "https://plugins.gradle.org/m2";
+            if (repositories.stream().noneMatch(repo -> portal.equals(repo.getUrl()))) {
+                repositories.add(new AppSettings.Repo(true, "Gradle Plugin Portal", portal));
+            }
+        }
+        for (var repository : repositories) {
             if (repository.isActive()) {
                 var candidate = findLatestVersion(repository.getUrl(), dependency, unstablePatterns);
                 if (candidate != null) {

@@ -29,6 +29,41 @@ public class MavenUtilsTest {
     public TemporaryFolder temporary = new TemporaryFolder();
 
     @Test
+    public void checksLegacyPluginImplementationCoordinates() throws IOException {
+        var repository = temporary.newFolder().toPath();
+        var metadata = repository.resolve("example/legacy/maven-metadata.xml");
+        Files.createDirectories(metadata.getParent());
+        Files.writeString(metadata, """
+                                    <metadata><versioning><versions><version>1.0</version><version>2.0</version>
+                                    <version>3.0-RC1</version></versions></versioning></metadata>
+                                    """);
+        var settings = settings(true);
+        settings.setRepos(List.of(new AppSettings.Repo(true, "Fixture", repository.toUri().toString())));
+        var plugin = Dependency.classpathPlugin("example", "legacy", "1.0");
+        MavenUtils.checkForUpdate(plugin, settings);
+        assertEquals("2.0", plugin.getLatestVersion());
+        assertNull(plugin.getError());
+    }
+
+    @Test
+    public void checksPluginMarkerInConfiguredRepositoryBeforePortal() throws IOException {
+        var repository = temporary.newFolder().toPath();
+        var metadata = repository.resolve("example/plugin/example.plugin.gradle.plugin/maven-metadata.xml");
+        Files.createDirectories(metadata.getParent());
+        Files.writeString(metadata, """
+                                    <metadata><versioning><versions>
+                                    <version>1.0</version><version>2.0</version><version>3.0-RC1</version>
+                                    </versions></versioning></metadata>
+                                    """);
+        var settings = settings(true);
+        settings.setRepos(List.of(new AppSettings.Repo(true, "Fixture", repository.toUri().toString())));
+        var plugin = Dependency.plugin("example.plugin", "1.0");
+        MavenUtils.checkForUpdate(plugin, settings);
+        assertEquals("2.0", plugin.getLatestVersion());
+        assertNull(plugin.getError());
+    }
+
+    @Test
     public void prefersLatestAndFallsBackToRelease() throws IOException {
         assertEquals("2.0", latest("<latest>2.0</latest>\n<release>1.0</release>", true));
         assertEquals("1.0", latest("<release>1.0</release>", true));

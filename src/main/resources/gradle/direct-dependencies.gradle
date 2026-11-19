@@ -1,5 +1,16 @@
 import groovy.json.JsonOutput
+import java.util.concurrent.CopyOnWriteArrayList
 import org.gradle.util.GradleVersion
+
+import java.util.zip.ZipFile
+
+// Retain details until evaluation ends so user resolution rules have finished changing the target.
+def pluginRequests = new CopyOnWriteArrayList()
+gradle.beforeSettings { settings ->
+    settings.pluginManagement.resolutionStrategy.eachPlugin { details ->
+        pluginRequests.add(details)
+    }
+}
 
 // Runs inside the target build; no dependency on the IDE/plugin classloader.
 gradle.projectsEvaluated {
@@ -15,7 +26,32 @@ gradle.projectsEvaluated {
             def modules = []
             rootProject.allprojects.sort { it.path }.each { targetProject ->
                 def entries = []
-                targetProject.configurations.findAll { configuration ->
+                // Legacy plugins use implementation coordinates, not plugin marker coordinates.
+                // Inspect only directly declared classpath artifacts; helper/transitive libraries
+                // without Gradle plugin descriptors are not plugins.
+                def legacyPlugins = []
+                def buildscriptConfigurations = targetProject.buildscript.configurations
+                if (buildscriptConfigurations.names.contains('classpath')) {
+                    def classpath = buildscriptConfigurations.named('classpath').get()
+                    def declared = classpath.allDependencies.withType(ExternalModuleDependency)
+                    classpath.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+                        def module = artifact.moduleVersion.id
+                        def declaration = declared.find { it.group == module.group && it.name == module.name }
+                        if (declaration == null || module.name.endsWith('.gradle.plugin')
+                                || !artifact.file.name.endsWith('.jar')) return
+                        def containsPlugin = false
+                        new ZipFile(artifact.file).withCloseable { jar ->
+                            containsPlugin = jar.entries().any { entry ->
+                                entry.name.startsWith('META-INF/gradle-plugins/') && entry.name.endsWith('.properties')
+                            }
+                        }
+                        if (containsPlugin) {
+                            legacyPlugins.add([group: module.group, name: module.name,
+                                               version: declaration.version ?: module.version])
+                        }
+                    }
+                }
+                targetProject.configurations.matching { configuration ->
                     def name = configuration.name.toLowerCase(Locale.ROOT)
                     name.endsWith('compileclasspath') || name.endsWith('runtimeclasspath') ||
                             name.endsWith('implementation')
@@ -53,7 +89,11 @@ gradle.projectsEvaluated {
                 }
                 modules.add([path: targetProject.path, parentPath: targetProject.parent?.path,
                              name: targetProject.name, directory: targetProject.projectDir.canonicalPath,
-                             buildFile: targetProject.buildFile.canonicalPath, dependencies: entries])
+                             buildFile: targetProject.buildFile.canonicalPath, dependencies: entries,
+                             plugins: legacyPlugins + (targetProject == rootProject ? pluginRequests.collect { details ->
+                                 [id: details.target.id.id, version: details.target.version]
+                             }.findAll { it.version && !it.id.startsWith('org.gradle.') }
+                                     .unique { [it.id, it.version] } : [])])
             }
             new File(options['dependencyCheckerOutput']).setText(JsonOutput.toJson(modules), 'UTF-8')
         }

@@ -10,10 +10,49 @@ import com.intellij.openapi.util.SystemInfoRt;
 
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class BuildSnapshotTest {
+    @Test
+    public void legacyPluginsKeepImplementationCoordinatesAndDeduplicateAcrossModules() {
+        var json = """
+                   [{"path":":","name":"root","buildFile":"build.gradle","dependencies":[],
+                     "plugins":[{"group":"example","name":"legacy","version":"1"}]},
+                    {"path":":child","parentPath":":","name":"child","buildFile":"child/build.gradle",
+                     "dependencies":[],"plugins":[{"group":"example","name":"legacy","version":"1"}]}]
+                   """;
+        var snapshot = new BuildSnapshot(new Gson().fromJson(json, BuildSnapshot.ModuleEntry[].class));
+        var plugins = snapshot.plugins();
+        assertEquals(1, plugins.size());
+        var plugin = plugins.getFirst();
+        assertTrue(plugin.isBuildscriptPlugin());
+        assertEquals("example", plugin.getGroup());
+        assertEquals("legacy", plugin.getName());
+        assertEquals("example:legacy:1", plugin.toString());
+        plugin.setLatestVersion("2");
+        assertNull(snapshot.plugins().getFirst().getLatestVersion());
+    }
+
+    @Test
+    public void deserializesPluginRequestsAndKeepsVersionsSeparate() {
+        var json = """
+                   [{"path":":","name":"root","buildFile":"build.gradle","dependencies":[],
+                     "plugins":[{"id":"example.plugin","version":"1"},
+                                {"id":"example.plugin","version":"1"},
+                                {"id":"example.plugin","version":"2"}]}]
+                   """;
+        var snapshot = new BuildSnapshot(new Gson().fromJson(json, BuildSnapshot.ModuleEntry[].class));
+        var plugins = snapshot.plugins();
+        assertEquals(2, plugins.size());
+        assertEquals("example.plugin", plugins.getFirst().getGroup());
+        assertEquals("example.plugin.gradle.plugin", plugins.getFirst().getName());
+        assertEquals("example.plugin:1", plugins.getFirst().toString());
+        plugins.getFirst().setLatestVersion("3");
+        assertTrue(snapshot.plugins().stream().allMatch(plugin -> plugin.getLatestVersion() == null));
+    }
+
     @Test
     public void preservesTreeAndIsolatesUiChanges() {
         var directory = new File("build/snapshot-fixture").getAbsoluteFile();

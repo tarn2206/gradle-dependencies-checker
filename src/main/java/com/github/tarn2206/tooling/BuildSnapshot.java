@@ -40,12 +40,26 @@ public final class BuildSnapshot {
         return result;
     }
 
+    public List<Dependency> plugins() {
+        return modules.stream().flatMap(module -> module.plugins().stream()).distinct()
+                      .map(entry -> entry.id() != null ? Dependency.plugin(entry.id(), entry.version())
+                                                       : Dependency.classpathPlugin(entry.group(), entry.name(), entry.version())).toList();
+    }
+
     record ModuleEntry(String path, String parentPath, String name, String directory,
-                       String buildFile, List<DependencyEntry> dependencies) {
+                       String buildFile, List<DependencyEntry> dependencies, List<PluginEntry> plugins) {
+        ModuleEntry(String path, String parentPath, String name, String directory,
+                    String buildFile, List<DependencyEntry> dependencies) {
+            this(path, parentPath, name, directory, buildFile, dependencies, List.of());
+        }
+
         ModuleEntry {
             dependencies = List.copyOf(dependencies);
+            plugins = plugins == null ? List.of() : List.copyOf(plugins);
         }
     }
+
+    record PluginEntry(String id, String version, String group, String name) { }
 
     record DependencyEntry(String group, String name, String version, String error) {
     }
