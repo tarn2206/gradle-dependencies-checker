@@ -8,3 +8,27 @@ Plugin Download page
 ----------------------------------------
 
 <https://plugins.jetbrains.com/plugin/14243-check-for-dependency-updates>
+
+Direct dependency integration test
+----------------------------------------
+
+Run from the repository root with a JDK supported by the Gradle wrapper (for
+example, JDK 21). No PowerShell or other additional runtime is required.
+
+macOS/Linux:
+
+```sh
+./gradlew -p tests testDirectDependencies --offline --no-configuration-cache
+```
+
+Windows (Command Prompt or PowerShell):
+
+```text
+.\gradlew.bat -p tests testDirectDependencies --offline --no-configuration-cache
+```
+
+The standalone build in `tests` uses an offline Maven fixture and does not load
+the plugin build or download IDE dependencies. The wrapper downloads its Gradle
+distribution on first use, so network access is needed until that distribution
+is cached. Fixture files and results are written under `tests/build`.
+To use an installed Gradle instead, replace the wrapper command with `gradle`.

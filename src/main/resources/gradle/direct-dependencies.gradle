@@ -1,0 +1,61 @@
+import groovy.json.JsonOutput
+import org.gradle.util.GradleVersion
+
+// Runs inside the target build; no dependency on the IDE/plugin classloader.
+gradle.projectsEvaluated {
+    def options = gradle.startParameter.projectProperties
+    if (!options['dependencyCheckerProject']) return
+    def targetDirectory = new File(options['dependencyCheckerProject']).canonicalFile
+    def target = rootProject.allprojects.find { it.projectDir.canonicalFile == targetDirectory }
+    // Init scripts also run for included builds. Only the owning build registers the task.
+    if (target == null) return
+
+    rootProject.tasks.register(options['dependencyCheckerTask']) {
+        doLast {
+            def modules = []
+            rootProject.allprojects.sort { it.path }.each { targetProject ->
+                def entries = []
+                targetProject.configurations.findAll { configuration ->
+                    def name = configuration.name.toLowerCase(Locale.ROOT)
+                    name.endsWith('compileclasspath') || name.endsWith('runtimeclasspath') ||
+                            name.endsWith('implementation')
+                }.sort { it.name }.each { configuration ->
+                    if (configuration.canBeResolved) {
+                        def result = configuration.incoming.resolutionResult
+                        // Variant traversal avoids accidentally including other variants of the root.
+                        def direct = GradleVersion.current() >= GradleVersion.version('8.11')
+                                ? result.rootComponent.get().getDependenciesForVariant(result.rootVariant.get())
+                                : result.root.dependencies
+                        direct.each { dependency ->
+                            def requested = dependency.requested
+                            if (!(requested instanceof ModuleComponentSelector) || dependency.constraint) return
+                            // Preserve the declared version for update/navigation matching. For BOM-managed
+                            // declarations without a version, use the selected version, as the report did.
+                            def version = requested.version ?: null
+                            if (version == null && dependency instanceof ResolvedDependencyResult) {
+                                version = dependency.selected.moduleVersion?.version
+                            }
+                            def error = dependency instanceof UnresolvedDependencyResult
+                                    ? dependency.failure.message : null
+                            entries.add([group: requested.group, name: requested.module,
+                                         version: version, error: error])
+                        }
+                    } else {
+                        // implementation is normally declarable, not resolvable. Do not force resolution
+                        // or lose declarations that have no corresponding classpath configuration.
+                        configuration.allDependencies.withType(ExternalModuleDependency).each { dependency ->
+                            if (dependency.version) {
+                                entries.add([group: dependency.group, name: dependency.name,
+                                             version: dependency.version, error: null])
+                            }
+                        }
+                    }
+                }
+                modules.add([path: targetProject.path, parentPath: targetProject.parent?.path,
+                             name: targetProject.name, directory: targetProject.projectDir.canonicalPath,
+                             buildFile: targetProject.buildFile.canonicalPath, dependencies: entries])
+            }
+            new File(options['dependencyCheckerOutput']).setText(JsonOutput.toJson(modules), 'UTF-8')
+        }
+    }
+}

@@ -1,0 +1,95 @@
+import groovy.json.JsonSlurper
+
+// Standalone build: only the wrapper and JDK are needed, without IDE dependencies.
+def fixture = layout.buildDirectory.dir('dependency-fixture-' + UUID.randomUUID()).get().asFile
+def result = new File(fixture, 'result.json')
+def initScript = file('../src/main/resources/gradle/direct-dependencies.gradle')
+
+def prepareFixture = tasks.register('prepareFixture') {
+    doLast {
+        def writeFile = { String path, String content ->
+            def destination = new File(fixture, path)
+            destination.parentFile.mkdirs()
+            destination.setText(content, 'UTF-8')
+        }
+        def writePom = { String name, String version, String body = '' ->
+            writeFile("repository/fixture/$name/$version/$name-${version}.pom", """
+                <project><modelVersion>4.0.0</modelVersion><groupId>fixture</groupId>
+                <artifactId>$name</artifactId><version>$version</version>$body</project>
+            """.stripIndent())
+        }
+        writeFile('settings.gradle', "rootProject.name = 'fixture'; include 'child', 'empty'")
+        writeFile('child/build.gradle', "plugins { id 'java-library' }; dependencies { implementation 'fixture:child-only:1' }")
+        writeFile('empty/build.gradle', "plugins { id 'java-library' }")
+        writeFile('build.gradle', '''
+            plugins { id 'java-library' }
+            allprojects { repositories { maven { url = rootProject.uri('repository') } } }
+            configurations {
+                specialImplementation { canBeResolved = false; canBeConsumed = false }
+            }
+            dependencies {
+                implementation 'fixture:direct:1'
+                implementation platform('fixture:bom:1')
+                implementation 'fixture:managed'
+                implementation 'fixture:missing:1'
+                implementation project(':child')
+                implementation files('local.jar')
+                testImplementation 'fixture:test-only:1'
+                specialImplementation 'fixture:declaration-only:1'
+                constraints { implementation 'fixture:constraint-only:1' }
+            }
+            configurations.configureEach { resolutionStrategy.force 'fixture:direct:2' }
+        '''.stripIndent())
+        writePom('direct', '1')
+        writePom('direct', '2', '<dependencies><dependency><groupId>fixture</groupId><artifactId>transitive</artifactId><version>1</version></dependency></dependencies>')
+        writePom('transitive', '1')
+        writePom('managed', '3')
+        writePom('child-only', '1')
+        writePom('test-only', '1')
+        writePom('bom', '1', '<packaging>pom</packaging><dependencyManagement><dependencies><dependency><groupId>fixture</groupId><artifactId>managed</artifactId><version>3</version></dependency></dependencies></dependencyManagement>')
+    }
+}
+
+def runFixture = tasks.register('runFixture', GradleBuild) {
+    dependsOn(prepareFixture)
+    dir = fixture
+    tasks = [':checkDirectDependencies']
+    startParameter.offline = true
+    startParameter.initScripts = [initScript]
+    startParameter.projectProperties = [
+        dependencyCheckerTask: 'checkDirectDependencies',
+        dependencyCheckerProject: fixture.absolutePath,
+        dependencyCheckerOutput: result.absolutePath
+    ]
+}
+
+tasks.register('testDirectDependencies') {
+    group = 'verification'
+    description = 'Checks direct dependencies using an offline Maven fixture.'
+    dependsOn(runFixture)
+    doLast {
+        def modules = new JsonSlurper().parse(result, 'UTF-8')
+        assert modules.size() == 3 : 'Expected all three modules from one Gradle invocation'
+        ['', 'child', 'empty'].each { module ->
+            def path = ':' + module
+            def data = modules.findAll { it.path == path }
+            assert data.size() == 1 : "Missing or duplicate module: $path"
+            assert data[0].parentPath == (module ? ':' : null) : "Incorrect subtree parent: $path"
+            assert new File(data[0].buildFile).isFile() : "Missing build file: $path"
+            def entries = data[0].dependencies
+            def names = entries.collect { it.name }.unique().sort()
+            def expected = [
+                '': ['bom', 'declaration-only', 'direct', 'managed', 'missing', 'test-only'],
+                child: ['child-only'],
+                empty: []
+            ][module]
+            assert names == expected : "Unexpected direct dependencies for '${module}': $names"
+            if (!module) {
+                assert !entries.any { it.name == 'direct' && it.version != '1' } : 'Requested version was replaced by the forced version'
+                assert entries.any { it.name == 'managed' && it.version == '3' } : 'BOM-managed version was not resolved'
+                assert entries.any { it.name == 'missing' && it.error } : 'Unresolved dependency error was lost'
+            }
+        }
+        logger.lifecycle('PASS: one invocation for all modules and subtree metadata; direct/transitive filtering, versions, BOM, constraints, unresolved dependencies, source sets, subprojects and empty project')
+    }
+}

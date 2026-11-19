@@ -1,10 +1,7 @@
 package com.github.tarn2206.ui;
 
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
@@ -12,10 +9,13 @@ import javax.swing.tree.TreePath;
 import com.github.tarn2206.AppSettings;
 import com.github.tarn2206.actions.RefreshAction;
 import com.github.tarn2206.actions.SettingsAction;
+import com.github.tarn2206.tooling.BuildSnapshot;
 import com.github.tarn2206.tooling.Dependency;
-import com.github.tarn2206.tooling.GradleHelper;
+import com.github.tarn2206.tooling.GradleDependencyCache;
 import com.github.tarn2206.tooling.MavenUtils;
 import com.github.tarn2206.tooling.ProjectInfo;
+import com.intellij.openapi.actionSystem.ActionManager;
+import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -23,171 +23,135 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.SimpleToolWindowPanel;
 import com.intellij.openapi.wm.ToolWindow;
-import com.intellij.ui.components.JBScrollPane;
-import com.intellij.ui.content.ContentFactory;
+import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.treeStructure.Tree;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
 
-public class DependenciesView extends SimpleToolWindowPanel
-{
+public class DependenciesView extends SimpleToolWindowPanel {
     private static final Logger LOG = Logger.getInstance(DependenciesView.class);
-    private final transient Project project;
+    private final Project project;
+    private final ToolWindow toolWindow;
     private Tree tree;
+    private boolean pendingUpdate;
     private DefaultMutableTreeNode rootNode;
     private final AtomicInteger worker = new AtomicInteger();
-    private final Set<Dependency> updateSet = new HashSet<>();
-    private final Queue<Dependency> updateList = new ConcurrentLinkedQueue<>();
+    // Only accessed on the EDT; background tasks receive individual dependencies.
+    private final List<Dependency> updateList = new ArrayList<>();
 
-    public DependenciesView(Project project)
-    {
+    public DependenciesView(Project project, ToolWindow toolWindow) {
         super(true, true);
         this.project = project;
+        this.toolWindow = toolWindow;
     }
 
-    public void initToolWindow(ToolWindow toolWindow)
-    {
-        toolWindow.setTitleActions(List.of(new RefreshAction(this), new SettingsAction()));
-
-        var contentFactory = ApplicationManager.getApplication().getService(ContentFactory.class);
-        var content = contentFactory.createContent(this, "", false);
-        toolWindow.getContentManager().addContent(content);
-
+    public void init() {
         rootNode = new DefaultMutableTreeNode();
         tree = new Tree(rootNode);
         tree.setCellRenderer(new MyTreeCellRenderer());
-        setContent(new JBScrollPane(tree));
 
-        update();
+        var actions = new DefaultActionGroup(new RefreshAction(this), new SettingsAction());
+        var actionToolbar = ActionManager.getInstance().createActionToolbar("Dependency Updates Toolbar", actions, true);
+        actionToolbar.setTargetComponent(this);
+        setToolbar(actionToolbar.getComponent());
+        setContent(ScrollPaneFactory.createScrollPane(tree));
+
+        GradleDependencyCache.getInstance(project);
+        project.getMessageBus().connect(toolWindow.getDisposable()).subscribe(
+                GradleDependencyCache.SYNC_COMPLETED,
+                () -> ApplicationManager.getApplication().invokeLater(() -> {
+                    if (!project.isDisposed() && !toolWindow.isDisposed()) loadCached();
+                }));
+        loadCached();
     }
 
-    public boolean isIdle()
-    {
+    public boolean isIdle() {
         return worker.get() == 0;
     }
 
-    public void update()
-    {
-        if (worker.get() > 0) return;
+    public void update() {
+        GradleDependencyCache.getInstance(project).invalidate();
+        loadCached();
+    }
+
+    private void loadCached() {
+        if (project.isDisposed()) return;
+        if (!isIdle()) {
+            pendingUpdate = true;
+            return;
+        }
+        pendingUpdate = false;
         worker.set(1);
 
-        updateSet.clear();
         updateList.clear();
         rootNode.removeAllChildren();
         rootNode.setUserObject("loading...");
         tree.updateUI();
 
-        new Task.Backgroundable(project, "Load project " + project.getName(), true)
-        {
-            private ProjectInfo info;
+        new Task.Backgroundable(project, "Load project " + project.getName(), true) {
+            private BuildSnapshot snapshot;
 
             @Override
-            public void run(@NotNull ProgressIndicator indicator)
-            {
-                info = GradleHelper.getProjectInfo(project);
+            public void run(@NotNull ProgressIndicator indicator) {
+                snapshot = GradleDependencyCache.getInstance(project).get();
             }
 
             @Override
-            public void onSuccess()
-            {
-                if (info != null)
-                {
-                    addProject(rootNode, info, AppSettings.getInstance());
-                }
-                else
-                {
+            public void onSuccess() {
+                if (snapshot != null) {
+                    addProject(rootNode, snapshot.projectInfo(), AppSettings.getInstance(), snapshot);
+                } else {
                     rootNode.setUserObject("Cannot load project info");
                 }
                 tree.updateUI();
-                worker.decrementAndGet();
+
             }
 
             @Override
-            public void onThrowable(@NotNull Throwable error)
-            {
+            public void onThrowable(@NotNull Throwable error) {
                 catchError(rootNode, error);
+            }
+
+            @Override
+            public void onFinished() {
+                finishWorker();
             }
         }.queue();
     }
 
-    private void addProject(DefaultMutableTreeNode node, ProjectInfo info, AppSettings settings)
-    {
-        var dependency = new Dependency(info.name());
-        node.setUserObject(dependency);
-
-        if (info.buildFile().exists())
-        {
-            worker.incrementAndGet();
-            dependency.setStatus("loading...");
-            new Task.Backgroundable(project, "Retrieve " + info.name() + " dependencies", true)
-            {
-                private List<Dependency> dependencies;
-
-                @Override
-                public void run(@NotNull ProgressIndicator indicator)
-                {
-                    dependencies = GradleHelper.getDependencies(project, info.buildFile().getParentFile());
-                }
-
-                @Override
-                public void onSuccess()
-                {
-                    dependency.setStatus(null);
-                    addDependencies(node, dependencies, settings);
-                }
-
-                @Override
-                public void onThrowable(@NotNull Throwable error)
-                {
-                    dependency.setStatus(null);
-                    catchError(node, error);
-                }
-            }.queue();
+    private void addProject(DefaultMutableTreeNode node, ProjectInfo info, AppSettings settings, BuildSnapshot snapshot) {
+        node.setUserObject(new Dependency(info.name()));
+        for (var dependency : snapshot.dependencies(info)) {
+            var child = new DefaultMutableTreeNode(dependency);
+            node.add(child);
+            if (dependency.hasGroup() && dependency.getVersion() != null) {
+                checkForUpdate(dependency, child, settings);
+            }
         }
+        tree.expandPath(new TreePath(node.getPath()));
+        tree.updateUI();
 
-        for (var sub : info.children())
-        {
+        for (var sub : info.children()) {
             var child = new DefaultMutableTreeNode();
             node.add(child);
-            addProject(child, sub, settings);
+            addProject(child, sub, settings, snapshot);
         }
 
-        if (node.getChildCount() > 0)
-        {
+        if (node.getChildCount() > 0) {
             tree.expandPath(new TreePath(node.getPath()));
         }
     }
 
-    private void addDependencies(DefaultMutableTreeNode node, List<Dependency> dependencies, AppSettings settings)
-    {
-        var n = 0;
-        for (var dependency : dependencies)
-        {
-            var child = new DefaultMutableTreeNode(dependency);
-            node.insert(child, n++);
-
-            if (dependency.hasGroup() && dependency.getVersion() != null)
-            {
-                checkForUpdate(dependency, child, settings);
-            }
-        }
-        worker.decrementAndGet();
-        tree.expandPath(new TreePath(node.getPath()));
-        tree.updateUI();
-    }
-
-    private void checkForUpdate(Dependency dependency, DefaultMutableTreeNode node, AppSettings settings)
-    {
+    private void checkForUpdate(Dependency dependency, DefaultMutableTreeNode node, AppSettings settings) {
         dependency.setStatus("check for updates...");
         tree.updateUI();
+        var alreadyChecking = updateList.stream().anyMatch(e -> e.sameModule(dependency));
         updateList.add(dependency);
-        if (updateSet.stream().anyMatch(e -> e.sameModule(dependency)))
-        {
+        if (alreadyChecking) {
             updateList.stream()
-                      .filter(e -> e.sameModule(dependency) && !e.equals(dependency) && e.getStatus() == null)
+                      .filter(e -> e != dependency && e.sameModule(dependency) && e.getStatus() == null)
                       .findAny()
-                      .ifPresent(e ->
-                      {
+                      .ifPresent(e -> {
                           dependency.setLatestVersion(e.getLatestVersion());
                           dependency.setStatus(null);
                           tree.updateUI();
@@ -195,52 +159,49 @@ public class DependenciesView extends SimpleToolWindowPanel
             return;
         }
 
-        updateSet.add(dependency);
         worker.incrementAndGet();
-        new Task.Backgroundable(project, "Check dependency updates", true)
-        {
+        new Task.Backgroundable(project, "Check dependency updates", true) {
             @Override
-            public void run(@NotNull ProgressIndicator indicator)
-            {
+            public void run(@NotNull ProgressIndicator indicator) {
                 MavenUtils.checkForUpdate(dependency, settings);
             }
 
             @Override
-            public void onSuccess()
-            {
+            public void onSuccess() {
                 dependency.setStatus(null);
                 updateList.stream()
-                          .filter(e -> e.sameModule(dependency) && !e.equals(dependency))
-                          .forEach(e ->
-                                   {
-                                       e.setLatestVersion(dependency.getLatestVersion());
-                                       e.setStatus(null);
-                                   });
+                          .filter(e -> e != dependency && e.sameModule(dependency))
+                          .forEach(e -> {
+                              e.setLatestVersion(dependency.getLatestVersion());
+                              e.setStatus(null);
+                          });
                 tree.updateUI();
-                worker.decrementAndGet();
             }
 
             @Override
-            public void onThrowable(@NotNull Throwable error)
-            {
+            public void onThrowable(@NotNull Throwable error) {
                 dependency.setStatus(null);
                 catchError(node, error);
+            }
+
+            @Override
+            public void onFinished() {
+                finishWorker();
             }
         }.queue();
     }
 
-    private void catchError(DefaultMutableTreeNode node, Throwable tr)
-    {
-        worker.decrementAndGet();
+    private void finishWorker() {
+        if (worker.decrementAndGet() == 0 && pendingUpdate && !project.isDisposed()) loadCached();
+    }
+
+    private void catchError(DefaultMutableTreeNode node, Throwable tr) {
         var rootCause = ExceptionUtils.getRootCause(tr);
         if (rootCause == null) rootCause = tr;
 
-        if (node.equals(rootNode))
-        {
+        if (node == rootNode) {
             rootNode.setUserObject(rootCause);
-        }
-        else
-        {
+        } else {
             var child = new DefaultMutableTreeNode(rootCause);
             node.insert(child, 0);
         }
