@@ -7,31 +7,26 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import org.jetbrains.annotations.NotNull;
 
-public class RefreshAction extends AnAction
-{
+public class RefreshAction extends AnAction {
     private final DependenciesView view;
 
-    public RefreshAction(DependenciesView view)
-    {
-        super("Check for Updates...", null, Actions.Refresh);
+    public RefreshAction(DependenciesView view) {
+        super("Check for Updates...", "Reload dependencies and check for available version updates", Actions.Refresh);
         this.view = view;
     }
 
     @Override
-    public void actionPerformed(@NotNull AnActionEvent e)
-    {
-        view.update();
+    public void actionPerformed(@NotNull AnActionEvent event) {
+        if (view.canCheckForUpdates()) view.update();
     }
 
     @Override
-    public @NotNull ActionUpdateThread getActionUpdateThread()
-    {
+    public void update(AnActionEvent event) {
+        event.getPresentation().setEnabled(view.canCheckForUpdates());
+    }
+
+    @Override
+    public @NotNull ActionUpdateThread getActionUpdateThread() {
         return ActionUpdateThread.BGT;
-    }
-
-    @Override
-    public void update(AnActionEvent e)
-    {
-        e.getPresentation().setEnabled(view.isIdle());
     }
 }

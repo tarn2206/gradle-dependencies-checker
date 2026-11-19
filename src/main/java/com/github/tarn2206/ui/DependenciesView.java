@@ -9,11 +9,15 @@ import javax.swing.tree.TreePath;
 import com.github.tarn2206.AppSettings;
 import com.github.tarn2206.actions.RefreshAction;
 import com.github.tarn2206.actions.SettingsAction;
+import com.github.tarn2206.actions.SyncGradleAction;
 import com.github.tarn2206.tooling.BuildSnapshot;
 import com.github.tarn2206.tooling.Dependency;
 import com.github.tarn2206.tooling.GradleDependencyCache;
+import com.github.tarn2206.tooling.GradleSyncState;
 import com.github.tarn2206.tooling.MavenUtils;
 import com.github.tarn2206.tooling.ProjectInfo;
+import com.intellij.ide.CommonActionsManager;
+import com.intellij.ide.DefaultTreeExpander;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.application.ApplicationManager;
@@ -25,6 +29,7 @@ import com.intellij.openapi.ui.SimpleToolWindowPanel;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.treeStructure.Tree;
+import com.intellij.util.Alarm;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
 
@@ -32,6 +37,7 @@ public class DependenciesView extends SimpleToolWindowPanel {
     private static final Logger LOG = Logger.getInstance(DependenciesView.class);
     private final Project project;
     private final ToolWindow toolWindow;
+    private final Alarm syncRefreshAlarm;
     private Tree tree;
     private boolean pendingUpdate;
     private DefaultMutableTreeNode rootNode;
@@ -43,6 +49,7 @@ public class DependenciesView extends SimpleToolWindowPanel {
         super(true, true);
         this.project = project;
         this.toolWindow = toolWindow;
+        syncRefreshAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, toolWindow.getDisposable());
     }
 
     public void init() {
@@ -50,7 +57,14 @@ public class DependenciesView extends SimpleToolWindowPanel {
         tree = new Tree(rootNode);
         tree.setCellRenderer(new MyTreeCellRenderer());
 
-        var actions = new DefaultActionGroup(new RefreshAction(this), new SettingsAction());
+        var treeExpander = new DefaultTreeExpander(tree);
+        var commonActions = CommonActionsManager.getInstance();
+        var actions = new DefaultActionGroup(new RefreshAction(this), new SyncGradleAction());
+        actions.addSeparator();
+        actions.add(commonActions.createExpandAllAction(treeExpander, tree));
+        actions.add(commonActions.createCollapseAllAction(treeExpander, tree));
+        actions.addSeparator();
+        actions.add(new SettingsAction());
         var actionToolbar = ActionManager.getInstance().createActionToolbar("Dependency Updates Toolbar", actions, true);
         actionToolbar.setTargetComponent(this);
         setToolbar(actionToolbar.getComponent());
@@ -60,22 +74,36 @@ public class DependenciesView extends SimpleToolWindowPanel {
         project.getMessageBus().connect(toolWindow.getDisposable()).subscribe(
                 GradleDependencyCache.SYNC_COMPLETED,
                 () -> ApplicationManager.getApplication().invokeLater(() -> {
-                    if (!project.isDisposed() && !toolWindow.isDisposed()) loadCached();
+                    if (isDisposed()) return;
+                    // Multiple linked builds can finish syncing in a burst. Their snapshots
+                    // are invalidated immediately; defer only the expensive UI reload.
+                    syncRefreshAlarm.cancelAllRequests();
+                    syncRefreshAlarm.addRequest(this::loadCached, 500);
                 }));
         loadCached();
     }
 
-    public boolean isIdle() {
+    private boolean isDisposed() {
+        return project.isDisposed() || toolWindow.isDisposed();
+    }
+
+    private boolean isIdle() {
         return worker.get() == 0;
     }
 
+    public boolean canCheckForUpdates() {
+        return !isDisposed() && isIdle() && !GradleSyncState.isSyncing(project);
+    }
+
     public void update() {
+        if (isDisposed()) return;
+        syncRefreshAlarm.cancelAllRequests();
         GradleDependencyCache.getInstance(project).invalidate();
         loadCached();
     }
 
     private void loadCached() {
-        if (project.isDisposed()) return;
+        if (isDisposed()) return;
         if (!isIdle()) {
             pendingUpdate = true;
             return;
@@ -98,6 +126,7 @@ public class DependenciesView extends SimpleToolWindowPanel {
 
             @Override
             public void onSuccess() {
+                if (isDisposed()) return;
                 if (snapshot != null) {
                     addProject(rootNode, snapshot.projectInfo(), AppSettings.getInstance(), snapshot);
                 } else {
@@ -168,6 +197,7 @@ public class DependenciesView extends SimpleToolWindowPanel {
 
             @Override
             public void onSuccess() {
+                if (isDisposed()) return;
                 dependency.setStatus(null);
                 updateList.stream()
                           .filter(e -> e != dependency && e.sameModule(dependency))
@@ -192,10 +222,11 @@ public class DependenciesView extends SimpleToolWindowPanel {
     }
 
     private void finishWorker() {
-        if (worker.decrementAndGet() == 0 && pendingUpdate && !project.isDisposed()) loadCached();
+        if (worker.decrementAndGet() == 0 && pendingUpdate && !isDisposed()) loadCached();
     }
 
     private void catchError(DefaultMutableTreeNode node, Throwable tr) {
+        if (isDisposed()) return;
         var rootCause = ExceptionUtils.getRootCause(tr);
         if (rootCause == null) rootCause = tr;
 
