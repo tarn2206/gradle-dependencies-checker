@@ -9,6 +9,7 @@ import com.github.tarn2206.AppSettings;
 import com.github.tarn2206.actions.RefreshAction;
 import com.github.tarn2206.actions.SettingsAction;
 import com.github.tarn2206.actions.SyncGradleAction;
+import com.github.tarn2206.actions.VulnerableDependenciesAction;
 import com.github.tarn2206.tooling.BuildSnapshot;
 import com.github.tarn2206.tooling.Dependency;
 import com.github.tarn2206.tooling.GradleDependencyCache;
@@ -56,14 +57,22 @@ public class DependenciesView extends SimpleToolWindowPanel {
     }
 
     private void initToolbar() {
+        var actions = new DefaultActionGroup(new RefreshAction(this), new SyncGradleAction());
+        // Reuse the IDE action, including its availability checks and project context.
+        var vulnerableDependencies = ActionManager.getInstance().getAction("PCAnalyzeVulnerableDependencies");
+        if (vulnerableDependencies != null) {
+            actions.add(new VulnerableDependenciesAction(vulnerableDependencies));
+        }
+
+        actions.addSeparator();
         var treeExpander = new DefaultTreeExpander(tree);
         var commonActions = CommonActionsManager.getInstance();
-        var actions = new DefaultActionGroup(new RefreshAction(this), new SyncGradleAction());
-        actions.addSeparator();
         actions.add(commonActions.createExpandAllAction(treeExpander, tree));
         actions.add(commonActions.createCollapseAllAction(treeExpander, tree));
+
         actions.addSeparator();
         actions.add(new SettingsAction());
+
         var actionToolbar = ActionManager.getInstance().createActionToolbar("Dependency Updates Toolbar", actions, true);
         actionToolbar.setTargetComponent(this);
         setToolbar(actionToolbar.getComponent());
