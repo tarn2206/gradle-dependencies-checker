@@ -2,7 +2,6 @@ package com.github.tarn2206.ui;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.tree.DefaultMutableTreeNode;
 
@@ -152,6 +151,8 @@ public class DependenciesView extends SimpleToolWindowPanel {
                       .findAny()
                       .ifPresent(e -> {
                           dependency.setLatestVersion(e.getLatestVersion());
+                          dependency.setAvailableUpdates(e.getAvailableUpdates());
+                          dependency.setError(e.getError());
                           dependency.setStatus(null);
                           tree.refreshRow(node);
                       });
@@ -159,20 +160,31 @@ public class DependenciesView extends SimpleToolWindowPanel {
         }
 
         worker.incrementAndGet();
+        // Maven checks mutate a detached copy; publish all fields together on the EDT.
+        var checked = new Dependency(dependency.getGroup(), dependency.getName(), dependency.getVersion());
+        checked.setPluginId(dependency.getPluginId());
+        checked.setBuildscriptPlugin(dependency.isBuildscriptPlugin());
+        checked.setResolvedArtifacts(dependency.getResolvedArtifacts());
+        checked.setError(dependency.getError());
         new Task.Backgroundable(project, "Check dependency updates", true) {
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
-                MavenUtils.checkForUpdate(dependency, settings);
+                MavenUtils.checkForUpdate(checked, settings);
             }
 
             @Override
             public void onSuccess() {
                 if (isDisposed()) return;
+                dependency.setLatestVersion(checked.getLatestVersion());
+                dependency.setAvailableUpdates(checked.getAvailableUpdates());
+                dependency.setError(checked.getError());
                 dependency.setStatus(null);
                 updateList.stream()
                           .filter(e -> e != dependency && sameUpdateCheck(e, dependency))
                           .forEach(e -> {
                               e.setLatestVersion(dependency.getLatestVersion());
+                              e.setAvailableUpdates(dependency.getAvailableUpdates());
+                              e.setError(dependency.getError());
                               e.setStatus(null);
                           });
                 tree.refreshRows(candidate -> sameUpdateCheck(candidate, dependency));
@@ -196,9 +208,7 @@ public class DependenciesView extends SimpleToolWindowPanel {
     }
 
     private static boolean sameUpdateCheck(Dependency first, Dependency second) {
-        return first.sameModule(second) && Objects.equals(first.getVersion(), second.getVersion())
-               && first.isBuildscriptPlugin() == second.isBuildscriptPlugin()
-               && Objects.equals(first.getPluginId(), second.getPluginId());
+        return first.sameUpdateCheck(second);
     }
 
     private void catchError(DefaultMutableTreeNode node, Throwable tr) {

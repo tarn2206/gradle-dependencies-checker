@@ -32,6 +32,8 @@ def prepareFixture = tasks.register('prepareFixture') {
                 implementation platform('fixture:bom:1')
                 implementation 'fixture:managed'
                 implementation 'fixture:missing:1'
+                implementation 'fixture:old:1'
+                implementation 'fixture:substituted-project:1'
                 implementation project(':child')
                 implementation files('local.jar')
                 testImplementation 'fixture:test-only:1'
@@ -39,6 +41,12 @@ def prepareFixture = tasks.register('prepareFixture') {
                 constraints { implementation 'fixture:constraint-only:1' }
             }
             configurations.configureEach { resolutionStrategy.force 'fixture:direct:2' }
+            configurations.configureEach {
+                resolutionStrategy.dependencySubstitution {
+                    substitute module('fixture:old') using module('fixture:replacement:4')
+                    substitute module('fixture:substituted-project') using project(':child')
+                }
+            }
         '''.stripIndent())
         writePom('direct', '1')
         writePom('direct', '2', '<dependencies><dependency><groupId>fixture</groupId><artifactId>transitive</artifactId><version>1</version></dependency></dependencies>')
@@ -46,6 +54,7 @@ def prepareFixture = tasks.register('prepareFixture') {
         writePom('managed', '3')
         writePom('child-only', '1')
         writePom('test-only', '1')
+        writePom('replacement', '4')
         writePom('bom', '1', '<packaging>pom</packaging><dependencyManagement><dependencies><dependency><groupId>fixture</groupId><artifactId>managed</artifactId><version>3</version></dependency></dependencies></dependencyManagement>')
     }
 }
@@ -79,7 +88,7 @@ tasks.register('testDirectDependencies') {
             def entries = data[0].dependencies
             def names = entries.collect { it.name }.unique().sort()
             def expected = [
-                '': ['bom', 'declaration-only', 'direct', 'managed', 'missing', 'test-only'],
+                '': ['bom', 'declaration-only', 'direct', 'managed', 'missing', 'old', 'substituted-project', 'test-only'],
                 child: ['child-only'],
                 empty: []
             ][module]
@@ -88,6 +97,11 @@ tasks.register('testDirectDependencies') {
                 assert !entries.any { it.name == 'direct' && it.version != '1' } : 'Requested version was replaced by the forced version'
                 assert entries.any { it.name == 'managed' && it.version == '3' } : 'BOM-managed version was not resolved'
                 assert entries.any { it.name == 'missing' && it.error } : 'Unresolved dependency error was lost'
+                assert entries.any { it.name == 'direct' && it.resolved?.version == '2' } : 'Update checks must use the forced resolved version'
+                assert entries.any { it.name == 'managed' && it.resolved?.version == '3' } : 'Update checks must use the BOM-selected version'
+                assert !entries.any { it.name in ['missing', 'declaration-only'] && it.resolved } : 'Unresolved declarations must not have resolved artifacts'
+                assert entries.any { it.name == 'old' && it.version == '1' && it.resolved == [group: 'fixture', name: 'replacement', version: '4'] } : 'Substituted Maven coordinates must be preserved'
+                assert !entries.any { it.name == 'substituted-project' && it.resolved } : 'Project substitutions must not be queried as Maven artifacts'
             }
         }
         logger.lifecycle('PASS: one invocation for all modules and subtree metadata; direct/transitive filtering, versions, BOM, constraints, unresolved dependencies, source sets, subprojects and empty project')

@@ -35,15 +35,29 @@ public final class BuildSnapshot {
         for (var entry : module.dependencies()) {
             var dependency = new Dependency(entry.group, entry.name, entry.version);
             dependency.setError(entry.error);
-            if (result.stream().noneMatch(existing -> existing.sameModule(dependency))) result.add(dependency);
+            var existing = result.stream().filter(d -> d.sameModule(dependency)).findFirst().orElse(null);
+            if (existing == null) {
+                existing = dependency;
+                result.add(existing);
+            }
+            if (entry.resolved != null && entry.resolved.isValid()) {
+                var resolved = new ArrayList<>(existing.getResolvedArtifacts());
+                if (!resolved.contains(entry.resolved)) resolved.add(entry.resolved);
+                existing.setResolvedArtifacts(List.copyOf(resolved));
+            }
         }
         return result;
     }
 
     public List<Dependency> plugins() {
         return modules.stream().flatMap(module -> module.plugins().stream()).distinct()
-                      .map(entry -> entry.id() != null ? Dependency.plugin(entry.id(), entry.version())
-                                                       : Dependency.classpathPlugin(entry.group(), entry.name(), entry.version())).toList();
+                      .map(entry -> {
+                          var dependency = entry.id() != null ? Dependency.plugin(entry.id(), entry.version())
+                                                              : Dependency.classpathPlugin(entry.group(), entry.name(), entry.version());
+                          if (entry.resolved() != null && entry.resolved().isValid())
+                              dependency.setResolvedArtifacts(List.of(entry.resolved()));
+                          return dependency;
+                      }).toList();
     }
 
     record ModuleEntry(String path, String parentPath, String name, String directory,
@@ -59,8 +73,11 @@ public final class BuildSnapshot {
         }
     }
 
-    record PluginEntry(String id, String version, String group, String name) { }
+    record PluginEntry(String id, String version, String group, String name, ResolvedArtifact resolved) { }
 
-    record DependencyEntry(String group, String name, String version, String error) {
+    record DependencyEntry(String group, String name, String version, String error, ResolvedArtifact resolved) {
+        DependencyEntry(String group, String name, String version, String error) {
+            this(group, name, version, error, null);
+        }
     }
 }

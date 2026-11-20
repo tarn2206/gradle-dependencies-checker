@@ -29,6 +29,42 @@ public class MavenUtilsTest {
     public TemporaryFolder temporary = new TemporaryFolder();
 
     @Test
+    public void comparesResolvedVersionAndClearsStaleUpdateResults() throws IOException {
+        var repository = temporary.newFolder().toPath();
+        writeMetadata(repository, "maven-metadata.xml", "2.17.2");
+        var settings = settings(true);
+        settings.setRepos(List.of(new AppSettings.Repo(true, "fixture", repository.toUri().toString())));
+        for (var declared : List.of("2.17.0", "2.+", "[2,3)", "9.0")) {
+            var dependency = new Dependency("example", "library", declared);
+            dependency.setResolvedArtifacts(List.of(new ResolvedArtifact("example", "library", "2.17.1")));
+            MavenUtils.checkForUpdate(dependency, settings);
+            assertEquals("2.17.2", dependency.getLatestVersion());
+            assertEquals("2.17.2", dependency.availableUpdatesText());
+            dependency.setResolvedArtifacts(List.of(new ResolvedArtifact("example", "library", "2.17.2")));
+            MavenUtils.checkForUpdate(dependency, settings);
+            assertNull(dependency.getLatestVersion());
+            assertTrue(dependency.getAvailableUpdates().isEmpty());
+            dependency.setResolvedArtifacts(List.of(new ResolvedArtifact("example", "library", "2.18.0")));
+            MavenUtils.checkForUpdate(dependency, settings);
+            assertNull(dependency.getLatestVersion());
+        }
+    }
+
+    @Test
+    public void checksEveryResolvedVersionAndUsesSubstitutedArtifactMetadata() throws IOException {
+        var repository = temporary.newFolder().toPath();
+        writeMetadata(repository, "maven-metadata.xml", "2.0");
+        var settings = settings(true);
+        settings.setRepos(List.of(new AppSettings.Repo(true, "fixture", repository.toUri().toString())));
+        var dependency = new Dependency("old", "replaced", "9.0");
+        var outdated = new ResolvedArtifact("example", "library", "1.0");
+        dependency.setResolvedArtifacts(List.of(new ResolvedArtifact("example", "library", "3.0"), outdated));
+        MavenUtils.checkForUpdate(dependency, settings);
+        assertEquals(List.of(new Dependency.AvailableUpdate(outdated, "2.0")), dependency.getAvailableUpdates());
+        assertEquals("example:library:2.0", dependency.availableUpdatesText());
+    }
+
+    @Test
     public void checksLegacyPluginImplementationCoordinates() throws IOException {
         var repository = temporary.newFolder().toPath();
         var metadata = repository.resolve("example/legacy/maven-metadata.xml");

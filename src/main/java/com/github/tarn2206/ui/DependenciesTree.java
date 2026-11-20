@@ -2,6 +2,7 @@ package com.github.tarn2206.ui;
 
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
+import javax.swing.ToolTipManager;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -21,6 +22,7 @@ final class DependenciesTree extends Tree {
     DependenciesTree() {
         setModel(model);
         setCellRenderer(new MyTreeCellRenderer());
+        ToolTipManager.sharedInstance().registerComponent(this);
     }
 
     void showLoading() {

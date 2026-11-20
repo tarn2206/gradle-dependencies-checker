@@ -1,7 +1,7 @@
 import groovy.json.JsonOutput
-import java.util.concurrent.CopyOnWriteArrayList
 import org.gradle.util.GradleVersion
 
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.ZipFile
 
 // Retain details until evaluation ends so user resolution rules have finished changing the target.
@@ -47,7 +47,8 @@ gradle.projectsEvaluated {
                         }
                         if (containsPlugin) {
                             legacyPlugins.add([group: module.group, name: module.name,
-                                               version: declaration.version ?: module.version])
+                                               version: declaration.version ?: module.version,
+                                               resolved: [group: module.group, name: module.name, version: module.version]])
                         }
                     }
                 }
@@ -73,8 +74,13 @@ gradle.projectsEvaluated {
                             }
                             def error = dependency instanceof UnresolvedDependencyResult
                                     ? dependency.failure.message : null
+                            def selected = dependency instanceof ResolvedDependencyResult
+                                           ? dependency.selected.moduleVersion : null
+                            // Project substitutions are not Maven artifacts.
+                            def resolved = selected != null && dependency.selected.id instanceof ModuleComponentIdentifier
+                                           ? [group: selected.group, name: selected.name, version: selected.version] : null
                             entries.add([group: requested.group, name: requested.module,
-                                         version: version, error: error])
+                                         version: version, error: error, resolved: resolved])
                         }
                     } else {
                         // implementation is normally declarable, not resolvable. Do not force resolution

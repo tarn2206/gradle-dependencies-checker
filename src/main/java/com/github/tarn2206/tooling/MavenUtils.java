@@ -1,6 +1,7 @@
 package com.github.tarn2206.tooling;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import com.github.tarn2206.AppSettings;
 import com.intellij.openapi.diagnostic.Logger;
@@ -16,6 +17,26 @@ public final class MavenUtils {
     private MavenUtils() { }
 
     public static void checkForUpdate(Dependency dependency, AppSettings settings) {
+        dependency.setLatestVersion(null);
+        dependency.setAvailableUpdates(List.of());
+        var updates = new ArrayList<Dependency.AvailableUpdate>();
+        String error = null;
+        for (var target : dependency.updateTargets()) {
+            var selected = new Dependency(target.group(), target.name(), target.version());
+            selected.setError(dependency.getError());
+            selected.setPluginId(dependency.getPluginId());
+            selected.setBuildscriptPlugin(dependency.isBuildscriptPlugin());
+            checkSelectedVersion(selected, settings);
+            if (selected.getLatestVersion() != null)
+                updates.add(new Dependency.AvailableUpdate(target, selected.getLatestVersion()));
+            if (selected.getError() != null) error = selected.getError();
+        }
+        dependency.setError(error);
+        dependency.setAvailableUpdates(List.copyOf(updates));
+        if (!updates.isEmpty()) dependency.setLatestVersion(updates.getFirst().latest());
+    }
+
+    private static void checkSelectedVersion(Dependency dependency, AppSettings settings) {
         var unstablePatterns = settings.isIgnoreUnstable() ? settings.getUnstablePatterns() : null;
         var repositories = new ArrayList<>(settings.getRepos());
         if (dependency.getPluginId() != null || dependency.isBuildscriptPlugin()) {

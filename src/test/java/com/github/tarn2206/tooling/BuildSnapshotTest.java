@@ -16,6 +16,23 @@ import static org.junit.Assert.assertTrue;
 
 public class BuildSnapshotTest {
     @Test
+    public void keepsAllResolvedComponentsWithoutChangingDeclaredVersion() {
+        var json = """
+                   [{"path":":","name":"root","buildFile":"build.gradle","dependencies":[
+                     {"group":"example","name":"lib","version":"1"},
+                     {"group":"example","name":"lib","version":"1","resolved":{"group":"replacement","name":"lib","version":"2"}},
+                     {"group":"example","name":"lib","version":"1","resolved":{"group":"replacement","name":"lib","version":"3"}},
+                     {"group":"example","name":"lib","version":"1","resolved":{"group":"replacement","name":"lib","version":"2"}}
+                   ]}]
+                   """;
+        var snapshot = new BuildSnapshot(new Gson().fromJson(json, BuildSnapshot.ModuleEntry[].class));
+        var dependency = snapshot.dependencies(snapshot.projectInfo()).getFirst();
+        assertEquals("1", dependency.getVersion());
+        assertEquals(List.of(new ResolvedArtifact("replacement", "lib", "2"),
+                             new ResolvedArtifact("replacement", "lib", "3")), dependency.getResolvedArtifacts());
+    }
+
+    @Test
     public void legacyPluginsKeepImplementationCoordinatesAndDeduplicateAcrossModules() {
         var json = """
                    [{"path":":","name":"root","buildFile":"build.gradle","dependencies":[],
